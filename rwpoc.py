@@ -159,11 +159,21 @@ def decrypt_files(crypt, start_dirs):
 def select_encryption_algorithm(key):
     with open(os.path.join(os.path.curdir, "config.json"), "r") as conf_file:
         config = json.loads(conf_file.read())
-    print(type(config), config)
 
-    # Create AES counter and AES cipher
-    ctr = Counter.new(128)
-    return AES.new(key, AES.MODE_CTR, counter=ctr)
+    match config["algo"]:
+        case "AES-CBC":
+            # Create AES counter and AES cipher
+            ctr = Counter.new(128)
+            return AES.new(key, AES.MODE_CBC, counter=ctr)
+        case "AES-CTR":
+            # Create AES counter and AES cipher
+            ctr = Counter.new(128)
+            return AES.new(key, AES.MODE_CTR, counter=ctr)
+        case "Salsa20" | "Fernet" | _:
+            # TODO: implement cases
+            # Create AES counter and AES cipher
+            ctr = Counter.new(128)
+            return AES.new(key, AES.MODE_CTR, counter=ctr)
 
 
 def parse_args():
