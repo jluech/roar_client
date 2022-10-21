@@ -4,9 +4,10 @@ import json
 import os
 import sys
 
-from Crypto.Cipher import AES, PKCS1_OAEP
+from Crypto.Cipher import AES, Salsa20, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
+from cryptography.fernet import Fernet
 
 # ============================================================
 # ============ 		GLOBALS 	  ==============
@@ -124,7 +125,7 @@ def modify_file_inplace(file_name, crypto, block_size=16):
         while plaintext:
             ciphertext = crypto(plaintext)
             if len(plaintext) != len(ciphertext):
-                raise ValueError('''Ciphertext({})is not of the same length of the Plaintext({}).
+                raise ValueError('''Ciphertext({})is not of the same length as the Plaintext({}).
                 Not a stream cipher.'''.format(len(ciphertext), len(plaintext)))
 
             f.seek(-len(plaintext), 1)  # return to same point before the read
@@ -162,18 +163,24 @@ def select_encryption_algorithm(key):
 
     match config["algo"]:
         case "AES-CBC":
-            # Create AES counter and AES cipher
+            assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
             return AES.new(key, AES.MODE_CBC, counter=ctr)
         case "AES-CTR":
-            # Create AES counter and AES cipher
+            assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
             return AES.new(key, AES.MODE_CTR, counter=ctr)
-        case "Salsa20" | "Fernet" | _:
-            # TODO: implement cases
-            # Create AES counter and AES cipher
+        case "Salsa20":
+            assert len(key) is 32
+            return Salsa20.new(key)
+        case "Fernet":
+            assert len(key) is 32
+            return Fernet(key)
+        case _:
+            assert len(key) in [16, 24, 32]
+            print("unknown encryption algorithm config used. Falling back to default AES-CBC")
             ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CTR, counter=ctr)
+            return AES.new(key, AES.MODE_CBC, counter=ctr)
 
 
 def parse_args():

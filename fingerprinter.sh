@@ -1,5 +1,6 @@
 #!/bin/bash -u
 
+# adjust script configuration to match your use-case
 # run with: nohup ./fingerprinter.sh 2>&1 & disown
 
 ##############################################################
