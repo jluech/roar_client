@@ -160,7 +160,7 @@ def select_encryption_algorithm(key):
         case "AES-CBC":
             assert len(key) in [16, 24, 32]
             crypt = AES.new(key=key, mode=AES.MODE_CBC)
-            return crypt, ".0", b64encode(crypt.iv).decode("utf-8").replace("/", "-#-")
+            return crypt, ".0", b64encode(crypt.iv).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
         case "AES-CTR":
             assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)

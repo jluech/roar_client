@@ -27,10 +27,39 @@ targetEvents="alarmtimer:alarmtimer_fired,alarmtimer:alarmtimer_start,block:bloc
 #	Initialize total time monitored (NOT TAKING INTO CONSIDERATION TIME BETWEEN SCREENSHOTS)
 timeAccumulative=0
 
+
+##############################################################
+############# 		DYNAMIC CONFIGURATION 	  ##############
+##############################################################
+help()
+{
+  echo "Usage: fingerprinter.sh [ -n limit ]
+                [ -h ]"
+  exit 1
+}
+
+limited=false
+limit=1
+current=0
+
+while getopts h:n: opt
+do
+  case $opt in
+    n)
+      limit=$OPTARG
+      limited=true
+      ;;
+    \? | h)
+      help
+      ;;
+  esac
+done
+
+
 ##############################################################
 #############     MONITORING LOOP			##############
 ##############################################################
-while :
+while [ "$current" -lt "$limit" ]
 do
 	##############################################################
 	#############		   DATA COLLECTION			##############
@@ -57,7 +86,7 @@ do
 	then
 		#	Second capture of network resources
 		newNetworkTraffic=$(ifconfig | grep -oP -e "bytes \K\w+" | head -n 4)
-		
+
 		#	Capture with top for CPU usage, tasks, and RAM usage
 		topResults=$(top -bn 2 -d 1)
 	fi
@@ -76,7 +105,7 @@ do
 		taskSamples=$(echo "$topResults" | grep "Tasks:" | tail -n 1 | tr -s " " | cut -d " " -f 2,4,6,8,10 --output-delimiter=",")
 		ramSamples=$(echo "$topResults" | grep "KiB Mem" | tail -n 1 | tr -s " " | cut -d " " -f 6,8,10 --output-delimiter=",")
 		swapSamples=$(echo "$topResults" | grep "KiB Swap:" | tail -n 1 | tr -s " " | cut -d " " -f 9 --output-delimiter=",")
-		
+
 		resourceSample="${cpuSamples},${taskSamples},${ramSamples},${swapSamples},${networkTraffic},"
 	else
 		resourceSample=""
@@ -99,4 +128,18 @@ do
 	echo "$dt"
 	#echo "$finalOutput" >> "fp-$dt.txt"
 	res=$(curl -sk -X POST -d "{\"fp\":[$finalOutput]}" -H "Content-Type: application/json" "$server:$port$route$mac")
+
+  if [ "$limited" = true ]
+  then
+    ((current++))
+  fi
+  if [ "$current" -gt 0 ] && [ $(("$current"%10)) = 0 ]
+  then
+    echo "Sent $current fingerprints"
+  fi
 done
+
+if [ "$limited" = true ]
+then
+  echo "Sent $current fingerprints in total"
+fi
