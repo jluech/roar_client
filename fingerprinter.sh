@@ -12,6 +12,8 @@ port="<C2-Port>"
 route="/fp/"
 mac=$( cat /sys/class/net/eth0/address | tr : _ ) # find MAC address and replace ":" with "_" for usage in route
 
+#	Temperature monitoring
+temperatureMonitor=true
 #	Resource monitoring
 resourceMonitor=true
 # Time window per sample
@@ -91,6 +93,12 @@ do
 		topResults=$(top -bn 2 -d 1)
 	fi
 
+	if [ "$temperatureMonitor" = true ]
+	then
+		#	Capture current CPU temperature as it may be responsible for throttling
+		cpuTemperature=$(vcgencmd measure_temp)  # example "temp=80.6'C"
+	fi
+
 	##############################################################
 	#############	DATA EXTRACTION/CALCULATION	  ##############
 	##############################################################
@@ -111,6 +119,15 @@ do
 		resourceSample=""
 	fi
 
+	if [ "$temperatureMonitor" = true ]
+	then
+		#	Extract CPU temperature
+		temperatureSample="${cpuTemperature%\'*}" # retain part before '
+		temperatureSample="${temperatureSample##*=}," # retain part after = and add a comma
+	else
+	  temperatureSample=""
+	fi
+
 	#	Data extraction from perf results
 	sample=$(echo "$tempOutput" | cut -c -20 | tr -s " " | tail -n +4 | head -n -2 | tr "\n" "," | sed 's/ //g'| sed 's/.$//')
 	seconds=$(echo "$tempOutput" | tr -s " " | cut -d " " -f 2 | tail -n 1 | tr "," ".")
@@ -123,7 +140,7 @@ do
 	##############################################################
 
 	#	PUSH to C2 server (and store locally)
-	finalOutput="$timeAccumulative,$timestamp,$seconds,$connectivity,${resourceSample}$sample"
+	finalOutput="$timeAccumulative,$timestamp,$seconds,$connectivity,${resourceSample}${temperatureSample}$sample"
 	dt=$(date +%Y-%m-%d_%H-%M-%S)
 	echo "$dt"
 	#echo "$finalOutput" >> "fp-$dt.txt"
