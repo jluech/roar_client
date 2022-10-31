@@ -1,6 +1,7 @@
 import json
 from multiprocessing import Process
 import socket
+from subprocess import call
 
 from globals import update_existing_config
 from rwpoc import run
@@ -23,12 +24,21 @@ def listen_for_config_changes():
                     update_existing_config(new_config)
 
 
+def collect_device_fingerprint():
+    call("./fingerprinter.sh")  # without option "-n <limit>", this will continuously collect FP
+
+
 if __name__ == "__main__":
-    proc = Process(target=listen_for_config_changes)
-    proc.start()
+    proc_config = Process(target=listen_for_config_changes)
+    proc_config.start()
+
+    proc_fp = Process(target=collect_device_fingerprint)
+    proc_fp.start()
 
     try:
         run(absolute_paths="None", encrypt=True)
     finally:
-        proc.terminate()
-        proc.join()
+        proc_fp.terminate()
+        proc_config.terminate()
+        proc_fp.join()
+        proc_config.join()
