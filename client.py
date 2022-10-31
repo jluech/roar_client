@@ -1,6 +1,6 @@
-import json
+from json import loads
 from multiprocessing import Process
-import socket
+from socket import AF_INET, SOCK_STREAM, socket
 from subprocess import call
 
 from globals import update_existing_config
@@ -8,7 +8,7 @@ from rwpoc import run
 
 
 def listen_for_config_changes():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    with socket(AF_INET, SOCK_STREAM) as sock:
         sock.bind(("0.0.0.0", 42666))
         sock.listen(1)
 
@@ -19,7 +19,7 @@ def listen_for_config_changes():
                     data = conn.recv(1024)  # listen for incoming data of connection
                     if not data:
                         break
-                    new_config = json.loads(data)
+                    new_config = loads(data)
                     print("received", new_config)
                     update_existing_config(new_config)
 

