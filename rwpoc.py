@@ -108,7 +108,7 @@ def discover_files(start_path):
         for i in files:
             absolute_path = path.abspath(path.join(dir_path, i))
             ext = absolute_path.split('.')[-1]
-            if ext in extensions:
+            if ext in extensions and not path.islink(absolute_path):
                 yield absolute_path
 
 
