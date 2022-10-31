@@ -36,7 +36,7 @@ if __name__ == "__main__":
     proc_fp.start()
 
     try:
-        run(absolute_paths="None", encrypt=True)
+        run(encrypt=True)
     finally:
         proc_fp.terminate()
         proc_config.terminate()
