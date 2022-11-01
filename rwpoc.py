@@ -129,22 +129,22 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
         plaintext = f.read(block_size)
 
         while plaintext:
-            match flag[0]:
-                case "0":  # AES-CBC
-                    if flag[1] == "0":  # encrypt, pad
-                        if len(plaintext) < block_size:
-                            padded = pad(plaintext, block_size)
-                            ciphertext = crypto(padded)
-                        else:
-                            ciphertext = crypto(plaintext)
-                    else:  # decrypt, unpad
-                        decrypted = crypto(plaintext)
-                        if decrypted.endswith(b"\x0b"):  # padding character
-                            ciphertext = unpad(decrypted, block_size)
-                        else:
-                            ciphertext = decrypted
-                case "1" | "2" | "3" | _:
-                    ciphertext = crypto(plaintext)
+            cipher = flag[0]
+            if cipher == "0":  # AES-CBC
+                if flag[1] == "0":  # encrypt, pad
+                    if len(plaintext) < block_size:
+                        padded = pad(plaintext, block_size)
+                        ciphertext = crypto(padded)
+                    else:
+                        ciphertext = crypto(plaintext)
+                else:  # decrypt, unpad
+                    decrypted = crypto(plaintext)
+                    if decrypted.endswith(b"\x0b"):  # padding character
+                        ciphertext = unpad(decrypted, block_size)
+                    else:
+                        ciphertext = decrypted
+            else:
+                ciphertext = crypto(plaintext)
 
             f.seek(-len(plaintext), 1)  # return to same point before the read
             f.write(ciphertext)
@@ -159,53 +159,52 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
 
 def select_encryption_algorithm(key):
     config = get_config_from_file()
-    match config["ALGORITHM"]["algo"]:
-        case "AES-CBC":
-            assert len(key) in [16, 24, 32]
-            cipher = AES.new(key=key, mode=AES.MODE_CBC)
-            return cipher, ".0", b64encode(cipher.iv).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
-        case "AES-CTR":
-            assert len(key) in [16, 24, 32]
-            ctr = Counter.new(128)
-            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1", None
-        case "Salsa20":
-            assert len(key) == 32
-            cipher = Salsa20.new(key=key)
-            return cipher, ".2", b64encode(cipher.nonce).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
-        case "ChaCha20":
-            assert len(key) == 32
-            cipher = ChaCha20.new(key=key)
-            return cipher, ".3", b64encode(cipher.nonce).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
-        case _:
-            assert len(key) in [16, 24, 32]
-            print("unknown encryption algorithm config used. Falling back to default AES-CTR encryption")
-            ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CTR, counter=ctr), ".1", None
+    algo = config["ALGORITHM"]["algo"]
+    if algo == "AES-CBC":
+        assert len(key) in [16, 24, 32]
+        cipher = AES.new(key=key, mode=AES.MODE_CBC)
+        return cipher, ".0", b64encode(cipher.iv).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
+    elif algo == "AES-CTR":
+        assert len(key) in [16, 24, 32]
+        ctr = Counter.new(128)
+        return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1", None
+    elif algo == "Salsa20":
+        assert len(key) == 32
+        cipher = Salsa20.new(key=key)
+        return cipher, ".2", b64encode(cipher.nonce).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
+    elif algo == "ChaCha20":
+        assert len(key) == 32
+        cipher = ChaCha20.new(key=key)
+        return cipher, ".3", b64encode(cipher.nonce).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
+    else:
+        assert len(key) in [16, 24, 32]
+        print("unknown encryption algorithm config used. Falling back to default AES-CTR encryption")
+        ctr = Counter.new(128)
+        return AES.new(key, AES.MODE_CTR, counter=ctr), ".1", None
 
 
 def select_decryption_algorithm(filename, key):
     split = path.basename(filename).split(".")[-2].split("--")
     flag = split[0]
     extra = split[1] if len(split) > 1 else None
-    match flag:
-        case "0":
-            assert len(key) in [16, 24, 32]
-            return AES.new(key=key, mode=AES.MODE_CBC, iv=b64decode(extra.replace("-#-", "/"))), "0"
-        case "1":
-            assert len(key) in [16, 24, 32]
-            ctr = Counter.new(128)
-            return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), "1"
-        case "2":
-            assert len(key) == 32
-            return Salsa20.new(key=key, nonce=b64decode(extra.replace("-#-", "/"))), "2"
-        case "3":
-            assert len(key) == 32
-            return ChaCha20.new(key=key, nonce=b64decode(extra.replace("-#-", "/"))), "3"
-        case _:
-            assert len(key) in [16, 24, 32]
-            print("unknown encryption algorithm config was used. Falling back to default AES-CTR decryption")
-            ctr = Counter.new(128)
-            return AES.new(key, AES.MODE_CTR, counter=ctr), "1"
+    if flag == "0":
+        assert len(key) in [16, 24, 32]
+        return AES.new(key=key, mode=AES.MODE_CBC, iv=b64decode(extra.replace("-#-", "/"))), "0"
+    elif flag == "1":
+        assert len(key) in [16, 24, 32]
+        ctr = Counter.new(128)
+        return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), "1"
+    elif flag == "2":
+        assert len(key) == 32
+        return Salsa20.new(key=key, nonce=b64decode(extra.replace("-#-", "/"))), "2"
+    elif flag == "3":
+        assert len(key) == 32
+        return ChaCha20.new(key=key, nonce=b64decode(extra.replace("-#-", "/"))), "3"
+    else:
+        assert len(key) in [16, 24, 32]
+        print("unknown encryption algorithm config was used. Falling back to default AES-CTR decryption")
+        ctr = Counter.new(128)
+        return AES.new(key, AES.MODE_CTR, counter=ctr), "1"
 
 
 def encrypt_files(key, start_dirs):
