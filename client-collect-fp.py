@@ -36,7 +36,6 @@ if __name__ == "__main__":
     proc_config.start()
 
     proc_fp = Process(target=collect_device_fingerprint)
-    proc_fp.start()
 
     try:
         with open("./rw-done.txt", "w") as file:
@@ -52,8 +51,12 @@ if __name__ == "__main__":
             if done:
                 break
 
-            run(encrypt=True, absolute_paths=abs_paths)
-            run(encrypt=False, absolute_paths=abs_paths)
+            proc_fp.start()
+            run(encrypt=True, absolute_paths=abs_paths)  # encrypt
+            proc_fp.terminate()
+            proc_fp.join()
+
+            run(encrypt=False, absolute_paths=abs_paths)  # decrypt
     finally:
         proc_fp.terminate()
         proc_config.terminate()
