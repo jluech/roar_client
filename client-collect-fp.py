@@ -1,5 +1,6 @@
 from json import loads
 from multiprocessing import Process
+from os import path
 from socket import AF_INET, SOCK_STREAM, socket
 from subprocess import call
 
@@ -25,10 +26,9 @@ def listen_for_config_changes():
 
 
 def collect_device_fingerprint():
-    call("./fingerprinter.sh -n 500")
+    call(path.join(path.abspath(path.curdir), "fingerprinter.sh")+" -n 500", shell=True)
     with open("./rw-done.txt", "w") as file:
         file.write("1")
-        file.truncate()
 
 
 if __name__ == "__main__":
