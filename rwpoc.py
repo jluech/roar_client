@@ -210,10 +210,23 @@ def select_decryption_algorithm(filename, key):
         return AES.new(key, AES.MODE_CTR, counter=ctr), "1"
 
 
+def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_duration, pause, conf_rate, curr_rate):
+    file_path = path.join(path.abspath(path.curdir), "metrics.txt")
+    if not path.exists(file_path):
+        with open(file_path, "x") as file:
+            file.write("files_nr,files_size,burst_total_duration,burst_current_duration,"
+                       + "burst_pause,burst_config_rate,burst_current_rate\n")
+    with open(file_path, "a") as file:
+        file.write(",".join(
+            [str(files_nr), str(files_size), str(total_duration), str(curr_duration), str(pause), str(conf_rate),
+             str(curr_rate)]) + "\n")
+
+
 def encrypt_files(key, start_dirs):
     file_counter = 0
     file_sizes = 0
     burst_start = time()
+    metric_time = time()
 
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
@@ -254,18 +267,30 @@ def encrypt_files(key, start_dirs):
                         # print("bursting for", file_counter, "files")
                         if file_counter >= duration:
                             reset_burst = True
-                            # print("sleeping for", config["BURST"]["pause"])
-                            sleep(int(config["BURST"]["pause"]))
                     else:  # limit seconds instead of files
-                        # print("bursting for", time() - burst_start, "seconds")
+                        # print("bursting for", "%.3f" % (time() - burst_start), "seconds")
                         if time() - burst_start >= duration:
                             reset_burst = True
-                            # print("sleeping for", config["BURST"]["pause"])
-                            sleep(int(config["BURST"]["pause"]))
                     if reset_burst:
+                        burst_running = time() - burst_start
+                        write_burst_metrics_to_file(file_counter, file_sizes, config["BURST"]["duration"],
+                                                    "%.3f" % burst_running, config["BURST"]["pause"],
+                                                    config["BURST"]["rate"], "%.3f" % (file_sizes / burst_running))
+
+                        # print("sleeping for", config["BURST"]["pause"])
+                        sleep(int(config["BURST"]["pause"]))
+
                         file_counter = 0
                         file_sizes = 0
                         burst_start = time()
+                else:  # encrypt without bursts
+                    since_last_metric = time() - metric_time
+                    if since_last_metric >= 10:
+                        encrypt_running = time() - burst_start
+                        write_burst_metrics_to_file(file_counter, file_sizes, config["BURST"]["duration"],
+                                                    "%.3f" % since_last_metric, config["BURST"]["pause"],
+                                                    config["BURST"]["rate"], "%.3f" % (file_sizes / encrypt_running))
+                        metric_time = time()
 
 
 def decrypt_files(key, start_dirs):
