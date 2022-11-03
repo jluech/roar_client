@@ -20,7 +20,7 @@ EXTENSION = ".wasted"  # Ransomware custom extension
 ROAR_DIR = "/roar"
 
 # following list of important Linux system directories: https://tldp.org/LDP/abs/html/systemdirs.html
-SAFE_DIRS = ["/boot", "/bin", "/usr/bin", "/usr/local/bin", "/sbin", "/usr/sbin", "/lib/python3", "/usr/lib/python3",
+SAFE_DIRS = ["/boot", "/bin", "/usr/bin", "/usr/local/bin", "/sbin", "/usr/sbin", "/lib", "/usr/lib", "/usr/local/lib",
              "/snap", "/sys", ROAR_DIR]
 
 # ============================================================
