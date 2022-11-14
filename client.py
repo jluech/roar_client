@@ -19,7 +19,7 @@ def listen_for_config_changes():
                     data = conn.recv(1024)  # listen for incoming data of connection
                     if not data:
                         break
-                    new_config = loads(data)
+                    new_config = loads(data.decode(encoding="utf-8"))
                     print("received", new_config)
                     update_existing_config(new_config)
 

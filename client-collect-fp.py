@@ -20,7 +20,7 @@ def listen_for_config_changes():
                     data = conn.recv(1024)  # listen for incoming data of connection
                     if not data:
                         break
-                    new_config = loads(data)
+                    new_config = loads(data.decode(encoding="utf-8"))
                     print("received", new_config)
                     update_existing_config(new_config)
 
@@ -28,7 +28,7 @@ def listen_for_config_changes():
 def kill_process(proc):
     if isinstance(proc, Process):
         print("kill Process", proc)
-        proc.kill()
+        proc.terminate()
         proc.join()
     elif isinstance(proc, Popen):
         print("kill Popen", proc)
@@ -52,14 +52,14 @@ if __name__ == "__main__":
             procs.append(proc_fp)
 
             # input("\nwait shortly for child to start")
-            print("ENCRYPT")
+            print("\nENCRYPT")
 
             run(encrypt=True, absolute_paths=abs_paths)  # encrypt
             kill_process(proc_fp)
             procs.remove(proc_fp)
 
             # input("\nEnter: start decrypting")
-            print("DECRYPT")
+            print("\nDECRYPT")
 
             run(encrypt=False, absolute_paths=abs_paths)  # decrypt
     finally:
