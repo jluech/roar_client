@@ -167,7 +167,7 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
 
 def select_encryption_algorithm(key):
     config = get_config_from_file()
-    algo = config["ALGORITHM"]["algo"]
+    algo = config["GENERAL"]["algo"]
     if algo == "AES-CBC":
         assert len(key) in [16, 24, 32]
         cipher = AES.new(key=key, mode=AES.MODE_CBC)
@@ -215,7 +215,7 @@ def select_decryption_algorithm(filename, key):
         return AES.new(key, AES.MODE_CTR, counter=ctr), "1"
 
 
-def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_duration, pause, conf_rate, curr_rate):
+def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_duration, pause, conf_rate, curr_rate, algorithm):
     file_path = path.join(path.abspath(path.curdir), "metrics.txt")
     if not path.exists(file_path):
         with open(file_path, "x") as file:
@@ -224,7 +224,7 @@ def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_durat
     with open(file_path, "a") as file:
         file.write(",".join(
             [str(files_nr), str(files_size), str(total_duration), str(curr_duration), str(pause), str(conf_rate),
-             str(curr_rate)]) + "\n")
+             str(curr_rate), str(algorithm)]) + "\n")
 
 
 def encrypt_files(key, start_dirs):
@@ -240,7 +240,7 @@ def encrypt_files(key, start_dirs):
                 config = get_config_from_file()
                 duration = int(config["BURST"]["duration"][1:])  # format examples "s5" or "f30"
                 limit_files = config["BURST"]["duration"].startswith("f")
-                rate = float(config["BURST"]["rate"])
+                rate = float(config["GENERAL"]["rate"])
 
                 crypt, flag, extra = select_encryption_algorithm(key)
                 try:
@@ -280,7 +280,8 @@ def encrypt_files(key, start_dirs):
                         burst_running = time() - burst_start
                         write_burst_metrics_to_file(file_counter, file_sizes, config["BURST"]["duration"],
                                                     "%.3f" % burst_running, config["BURST"]["pause"],
-                                                    config["BURST"]["rate"], "%.3f" % (file_sizes / burst_running))
+                                                    config["GENERAL"]["rate"], "%.3f" % (file_sizes / burst_running),
+                                                    config["GENERAL"]["algo"])
 
                         # print("sleeping for", config["BURST"]["pause"])
                         sleep(int(config["BURST"]["pause"]))
@@ -294,7 +295,8 @@ def encrypt_files(key, start_dirs):
                         encrypt_running = time() - burst_start
                         write_burst_metrics_to_file(file_counter, file_sizes, config["BURST"]["duration"],
                                                     "%.3f" % since_last_metric, config["BURST"]["pause"],
-                                                    config["BURST"]["rate"], "%.3f" % (file_sizes / encrypt_running))
+                                                    config["GENERAL"]["rate"], "%.3f" % (file_sizes / encrypt_running),
+                                                    config["GENERAL"]["algo"])
                         metric_time = time()
 
 
