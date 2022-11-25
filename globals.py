@@ -9,7 +9,7 @@ def update_existing_config(new_config):
     config.set("BURST", "duration", new_config["burst_duration"])
     config.set("BURST", "pause", new_config["burst_pause"])
 
-    with open(os.path.join(os.path.curdir, "./config.file"), "w") as config_file:
+    with open(os.path.join(os.path.curdir, "config.file"), "w") as config_file:
         config.write(config_file)
 
 

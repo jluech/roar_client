@@ -6,6 +6,8 @@ from subprocess import call
 from globals import update_existing_config
 from rwpoc import run
 
+TARGET_PATH = "<start-path-on-target-device>"
+
 
 def listen_for_config_changes():
     with socket(AF_INET, SOCK_STREAM) as sock:
@@ -36,9 +38,9 @@ if __name__ == "__main__":
     proc_fp.start()
 
     try:
-        run(encrypt=True)
+        run(encrypt=True, absolute_paths=TARGET_PATH)
     finally:
         proc_fp.terminate()
-        proc_config.terminate()
         proc_fp.join()
+        proc_config.terminate()
         proc_config.join()
