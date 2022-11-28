@@ -220,7 +220,7 @@ def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_durat
     if not path.exists(file_path):
         with open(file_path, "x") as file:
             file.write("files_nr,files_size,burst_total_duration,burst_current_duration,"
-                       + "burst_pause,burst_config_rate,burst_current_rate\n")
+                       + "burst_pause,burst_config_rate,burst_current_rate,algorithm\n")
     with open(file_path, "a") as file:
         file.write(",".join(
             [str(files_nr), str(files_size), str(total_duration), str(curr_duration), str(pause), str(conf_rate),
