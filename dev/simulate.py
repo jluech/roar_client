@@ -2,6 +2,10 @@ import json
 import socket
 
 
+# ==============================
+# SIMULATE C2 SERVER BEHAVIOR
+# ==============================
+
 def send_config(config_nr=1):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect(("0.0.0.0", 42666))
