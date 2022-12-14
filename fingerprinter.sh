@@ -144,7 +144,8 @@ do
 	dt=$(date +%Y-%m-%d_%H-%M-%S)
 	echo "$dt"
 	#echo "$finalOutput" >> "fp-$dt.txt"
-	res=$(curl -sk -X POST -d "{\"fp\":[$finalOutput]}" -H "Content-Type: application/json" "$server:$port$route$mac")
+	rate="$(cat ./rate.roar)"
+	res=$(curl -sk -X POST -d "{\"fp\":[$finalOutput], \"rate\":$rate}" -H "Content-Type: application/json" "$server:$port$route$mac")
 
   if [ "$limited" = true ]
   then
