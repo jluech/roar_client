@@ -172,9 +172,11 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
                     # if r * b < f then r * (b + n) = f, thus n = f/r - b
                     subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
                     even_out = (bytes_counter / rate) - enc_running
-                    print("sleeping for {} to limit rate - r {} d {} s {}".format(
-                        "%.5f" % even_out, rate, "%.5f" % enc_running, bytes_counter))
+                    # print("sleeping for {} to limit rate - r {} d {} s {}".format(
+                    #     "%.5f" % even_out, rate, "%.5f" % enc_running, bytes_counter))
                     sleep(even_out)
+                elif rate == 0:
+                    subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
 
             if len(ciphertext) < len(plaintext):
                 # since the decrypted text is smaller than the encrypted, the block_size was not reached.

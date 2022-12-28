@@ -61,6 +61,7 @@ done
 ##############################################################
 #############     MONITORING LOOP			##############
 ##############################################################
+lastRate="0" # initialize for loop-usage below
 while [ "$current" -lt "$limit" ]
 do
 	##############################################################
@@ -144,8 +145,10 @@ do
 	dt=$(date +%Y-%m-%d_%H-%M-%S)
 	echo "$dt"
 	#echo "$finalOutput" >> "fp-$dt.txt"
-	rate="$(cat ./rate.roar)"
-	res=$(curl -sk -X POST -d "{\"fp\":[$finalOutput], \"rate\":$rate}" -H "Content-Type: application/json" "$server:$port$route$mac")
+	newRate="$(cat ./rate.roar)"
+	lastRate=$([ -z "$newRate" ] && echo "$lastRate" || echo "$newRate") # do not assign empty newRate
+	#echo -e "\n-- $lastRate" >> "fp-$dt.txt" # -e enables backslash escapes
+	res=$(curl -sk -X POST -d "{\"fp\":[$finalOutput], \"rate\":$lastRate}" -H "Content-Type: application/json" "$server:$port$route$mac")
 
   if [ "$limited" = true ]
   then
