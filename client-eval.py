@@ -120,10 +120,16 @@ if __name__ == "__main__":
     procs.append(proc_fp)
     proc_fp.start()
 
-    # Start off encryption with clean config from C2
+    # Start off encryption with clean folder
     config_path = get_config_path()
     if path.exists(config_path):
         remove(config_path)
+    reset_path = get_reset_path()
+    if path.exists(reset_path):
+        remove(reset_path)
+    terminate_path = get_terminate_path()
+    if path.exists(terminate_path):
+        remove(terminate_path)
 
     print("Waiting for initial config...")
     while not path.exists(config_path):
@@ -143,10 +149,9 @@ if __name__ == "__main__":
             print("\nDECRYPT")
             # run(encrypt=False, absolute_paths=abs_paths)  # decrypt
             call("./reset_corpus.sh")
-            reset_path = get_reset_path()
+
             if path.exists(reset_path):
                 remove(reset_path)
-            terminate_path = get_terminate_path()
             if path.exists(terminate_path):
                 remove(terminate_path)
                 break

