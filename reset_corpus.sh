@@ -1,13 +1,14 @@
 #!/bin/bash
 rm /home/root/corpus/*
-# replace strings with literals, removing ""
-#find "<path-to-dataset>" -size -5 -exec cp -v "{}" "<path-to-corpus>"/corpus/ \;
-find "<path-to-dataset>" -size -5 -exec cp "{}" "<path-to-corpus>"/corpus \;
 
+# replace path strings with literals, removing ""
+
+#find "<path-to-dataset>" -size -5 -exec cp -v "{}" "<path-to-corpus>"/corpus/ \;
 #cp -v /-/data/BLQYONKYGPSK7RW76LOAUDZGQXB634CT.pdf /-/corpus/
 #cp -v /-/data/CS4O7BCLPRK6J5MKIK7BPBFC2UURCM7X.pdf /-/corpus/
 #cp -v /-/data/HPXULDFI3DAZ3V2NZOHYUGUY5SLS4AHU.pdf /-/corpus/
 
+find "<path-to-dataset>" -size -6 -exec cp "{}" "<path-to-corpus>"/corpus \;
 #1.7K    /-/corpus/BLQYONKYGPSK7RW76LOAUDZGQXB634CT.pdf
 #1.6K    /-/corpus/CS4O7BCLPRK6J5MKIK7BPBFC2UURCM7X.pdf
 #1.7K    /-/corpus/HPXULDFI3DAZ3V2NZOHYUGUY5SLS4AHU.pdf
