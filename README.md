@@ -6,6 +6,9 @@ It is generally advised to first consult the corresponding report of this master
 The report motivates the thesis and introduces the required background.
 It further explains the development, and reasoning of the ransomware extension in great detail.
 
+This repository contains the underlying ransomware of ROAR.
+There is [another repository](https://github.com/jluech/roar_server) for the RL Agent and command and control (C&C) part.
+
 
 
 
